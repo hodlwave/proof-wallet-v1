@@ -86,7 +86,7 @@ class Wallet:
         return self.adapter.bitcoin_cli_json("deriveaddresses", desc, json.dumps([start, end]))
 
     def decodepsbt(self, psbt):
-        pass
+        return self.adapter.bitcoin_cli_json("decodepsbt", psbt)
     
     def walletprocesspsbt(self, psbt):
-        pass
+        return self.adapter.bitcoin_cli_json(f"-rpcwallet={self.name}", "walletprocesspsbt", psbt)
