@@ -1,5 +1,5 @@
 import json
-
+import os
 from proof.bitcoind import BitcoindAdapter
 from crypto.mnemonic import Mnemonic
 from crypto import bip32
@@ -15,13 +15,15 @@ class Cosigner:
         
 class Wallet:
     def __init__(self, mnemonic, cosigners, m, network="mainnet", derivation = "/", name=None):
-        self.adapter = BitcoindAdapter(network)
+        self.network = network
         self.mnemonic = mnemonic
         self.cosigners = cosigners
         self.m = m
         self.derivation = derivation
         self.name = f"wallet-{self.fingerprint}" if name is None else name
 
+        # ensure bitcoind running
+        self.adapter.ensure_bitcoind_running()
         # create wallet
         self.createwallet()
         
@@ -41,7 +43,39 @@ class Wallet:
     @property
     def fingerprint(self):
         return bip32.fingerprint(self.xpub)
-        
+
+    @property
+    def adapter(self):
+        return BitcoindAdapter(self.network)
+
+    @staticmethod
+    def get_dir():
+        _dir = os.getenv("HOME") + "/.proof"
+        if not os.path.isdir(_dir):
+            os.makedirs(_dir)
+        return _dir
+
+    @property
+    def wallet_path(self):
+        return Wallet.get_dir() + "/" + self.name
+
+    def save(self):
+        data = json.dumps(self, default=lambda o: o.__dict__)
+        with open(self.wallet_path, 'w') as f:
+            f.write(data)
+
+    @classmethod
+    def load(cls, name):
+        path = cls.get_dir() + "/" + name
+        with open(path, 'r') as f:
+            d = json.loads(f.read())
+            cosigners_raw = d["cosigners"]
+            cosigners = list(map(
+                lambda x: Cosigner(x["fingerprint"], x["xpub"], x["derivation"]),
+                cosigners_raw
+            ))
+            return cls(d["mnemonic"], cosigners, d["m"], d["network"], d["derivation"], d["name"])
+
     def createwallet(self):
         # list wallets (return if already exists)
         wallets = self.adapter.bitcoin_cli_json("listwallets")

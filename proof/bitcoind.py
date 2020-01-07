@@ -7,7 +7,6 @@ class BitcoindAdapter:
 
     def __init__(self, network="mainnet"):
         self.network = network
-        self.ensure_bitcoind_running()
    
     def run_subprocess(self, exe, *args):
         """
