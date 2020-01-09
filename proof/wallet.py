@@ -14,11 +14,12 @@ class Cosigner:
         self.xpub = xpub
         
 class Wallet:
-    def __init__(self, mnemonic, cosigners, m, network="mainnet", derivation = "/", name=None):
+    def __init__(self, mnemonic, cosigners, m, n, network="mainnet", derivation = "/", name=None):
         self.network = network
         self.mnemonic = mnemonic
         self.cosigners = cosigners
         self.m = m
+        self.n = n
         self.derivation = derivation
         self.name = f"wallet-{self.fingerprint}" if name is None else name
 
