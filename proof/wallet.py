@@ -75,7 +75,7 @@ class Wallet:
                 lambda x: Cosigner(x["fingerprint"], x["xpub"], x["derivation"]),
                 cosigners_raw
             ))
-            return cls(d["mnemonic"], cosigners, d["m"], d["network"], d["derivation"], d["name"])
+            return cls(d["mnemonic"], cosigners, d["m"], d["n"], d["network"], d["derivation"], d["name"])
 
     def createwallet(self):
         # list wallets (return if already exists)

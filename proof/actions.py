@@ -6,10 +6,11 @@ from hashlib import sha256
 from binascii import hexlify
 
 from proof.ux import ux_show_story
-from proof.wallet import Wallet
-from proof.utils import format_rolls, pprint_entropy, generate_qr, choose_from
+from proof.wallet import Wallet, Cosigner
+from proof.utils import *
 from crypto.mnemonic import Mnemonic
-            
+from crypto import bip32
+
 async def network_select():
     msg = """\
 Welcome to Proof Wallet,
@@ -35,14 +36,21 @@ async def diagnostic_report(d):
     return await ux_show_story(msg, None, ['\r'])
     
 async def home(network):
-    msg = "Proof Wallet: Home\n\n"
-    msg += "1) Create wallet\n"
-    msg += "2) Load wallet\n"
-    msg += "3) Exit\n"
-    ch = await ux_show_story(msg, None, ['1', '2', '3'])
-    if ch == '1':
-        return await create_wallet(network)
-    sys.exit(0)
+    while True:
+        msg = "Proof Wallet: Home\n\n"
+        msg += "1) Create wallet\n"
+        msg += "2) Finalize wallet\n"
+        msg += "3) Load wallet\n"
+        msg += "4) Exit\n"
+        ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
+        if ch == '1':
+            await create_wallet(network)
+        elif ch == '2':
+            await finalize_wallet()
+        elif ch == '3':
+            await load_wallet()
+        else:
+            sys.exit(0)
 
 async def choose_policy():
     """
@@ -211,12 +219,68 @@ async def create_wallet(network):
     w = Wallet(mnemonic, [], M, N, network)
     await export_xpub(w.xpub)
     w.save()
-    msg = f"""{title}
-The wallet skeleton data has been saved locally on this computer.\
-Once you've constructed all {N} (i.e. N) of your multisignature wallets and\
-exported their xpubs, you can load this wallet in the 'Load Wallet'\
+    msg = f"""{title}\
+The wallet skeleton data has been saved locally on this computer. \
+Once you've constructed all {N} (i.e. N) of your multisignature wallets and \
+exported their xpubs, you can load this wallet in the 'Load Wallet' \
 menu and import the other {N-1} (i.e. N-1) xpubs to finalize this wallet.
 
-Note that this wallet will be listed as {w.name} in the 'Load Wallet'\
+Note that this wallet will be listed as {w.name} in the 'Load Wallet' \
 menu.
+
+Press [Enter] to return to the home menu.
 """
+    return await ux_show_story(msg, None, ['\r'])
+
+async def finalize_wallet():
+    title = "Proof Wallet: Finalize Wallet"
+    # choose wallet to finalize
+    all_wallets = get_all_wallets()
+    unfinished_wallets = list(filter(lambda w: len(w.cosigners) + 1 != w.n, all_wallets))
+    unfinished_names = list(map(lambda w: w.name, unfinished_wallets))
+    msg_prefix = f"{title}\n\nSelect a wallet to finalize"
+    idx = await choose_from_list(msg_prefix, unfinished_names)
+    w = unfinished_wallets[idx]
+    # import N xpubs flow
+    cosigner_xpubs = []
+    while True:
+        num_remaining = w.n - len(cosigner_xpubs) - 1
+        warning = "You have not yet imported any cosigner xpubs.\n" if len(cosigner_xpubs) == 0 else ""
+        cosigner_str = "cosigner | xpub\n" if len(cosigner_xpubs) > 0 else ""
+        for (cosigner_fp, cosigner_xpub) in cosigner_xpubs:
+            cosigner_str += f"{cosigner_fp} | {cosigner_xpub}\n"
+
+        # check if wallet is complete
+        if num_remaining == 0:
+            # regenerate wallet with xpubs
+            cosigners = list(map(lambda x: Cosigner(x[0], x[1]), cosigner_xpubs))
+            w_updated = Wallet(w.mnemonic, cosigners, w.m, w.n, w.network)
+            w_updated.save()
+            msg = f"""{title}
+
+{w.name} has now been finalized with the following cosigners:
+
+{cosigner_str}\
+
+You can now load this wallet in the 'Load Wallet' menu, and \
+use it to receive bitcoin and sign PSBTs.
+
+Press [Enter] to return to the home menu.
+"""
+            return await ux_show_story(msg, None, ['\r'])
+        # wallet is not yet complete
+        msg = f"""{title}
+
+The following list shows the cosigner xpubs you have imported:
+
+{warning}{cosigner_str}\
+
+This wallet has {w.n} total signers, so you have {num_remaining} xpubs \
+left to import.
+
+Press [ENTER] to initiate the qr code scanner.
+"""
+        await ux_show_story(msg, None, ['\r'])
+        xpub = await scan_qr()
+        fp = bip32.fingerprint(xpub)
+        cosigner_xpubs.append((fp, xpub))
