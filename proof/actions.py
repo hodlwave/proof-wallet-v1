@@ -290,13 +290,13 @@ async def view_receive_addresses(w):
         # display receive addreses
         msg += "Derivation | Receive Address\n"
         for i, addr in enumerate(external):
-            msg += f"m{w.derivation}0/{str(i + start)} | "
+            msg += f"m/0/{str(i + start)} | "
             msg += f"{color_text(addr, GREEN_COLOR, fg)}\n"
 
         # display change addreses
         msg += f"\nDerivation | Change Address\n"
         for i, addr in enumerate(internal):
-            msg += f"m{w.derivation}1/{str(i + start)} | "
+            msg += f"m/1/{str(i + start)} | "
             msg += f"{color_text(addr, YELLOW_COLOR, fg)}\n"
 
         ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
@@ -313,7 +313,7 @@ async def wallet_menu(w):
 Wallet Name: {w.name}
 Policy: {w.m} of {w.n}
 Network: {w.network}
-Highest hardened derivation path: {"'" + "m" + w.derivation + "'"}
+Highest hardened derivation path: {"'m/'"}
 
 """
     while True:

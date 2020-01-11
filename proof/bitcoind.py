@@ -50,14 +50,14 @@ class BitcoindAdapter:
         _, retcode, _ = self.run_subprocess("bitcoind", f"-{self.network}", *args)
         return retcode
     
-    def ensure_bitcoind_running(self):
+    def ensure_bitcoind_running(self, *args):
         """
         Start bitcoind (if it's not already running) and ensure it's functioning properly
         """
         # start bitcoind.  If another bitcoind process is already running,
         # this will just print an error message (to /dev/null) and exit.
 
-        self.bitcoind_call("-daemon")
+        self.bitcoind_call("-daemon", *args)
     
         # verify bitcoind started up and is functioning correctly
         times = 0

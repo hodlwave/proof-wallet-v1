@@ -125,3 +125,25 @@ Press 'x' to abort this import.
     if ch == '\r':
         return True
     return False
+
+def validate_psbt(psbt_raw, w):
+    """
+    Validates that the psbt is safe to sign based on
+    a stringent set of criteria for the provided wallet.
+
+    Keyword arguments:
+    psbt_raw -- the base64 encoded psbt string
+    w        -- the prospective signing Wallet
+    """
+    response = {
+        "success": [],
+        "warning": [],
+        "errors": []
+    }
+    try:
+        # attempt to decode psbt
+        psbt = w.decodepsbt(psbt_raw)
+        response["success"].append("The provided base64 encoded input is a valid PSBT.")
+    except subprocess.CalledProcessError:
+        response["errors"].append("The provided base64 encoded input is NOT a valid PSBT.")
+    return response

@@ -5,22 +5,19 @@ from crypto.mnemonic import Mnemonic
 from crypto import bip32
 
 class Cosigner:
-    def __init__(self, fingerprint, xpub, derivation="/"):
+    def __init__(self, fingerprint, xpub):
         # master fingerprint of cosigner
         self.fingerprint = fingerprint
-        # highest hardended derivation path
-        self.derivation = derivation
         # account extended public key associated with highest hardened derivation
         self.xpub = xpub
         
 class Wallet:
-    def __init__(self, mnemonic, cosigners, m, n, network="mainnet", derivation = "/", name=None):
+    def __init__(self, mnemonic, cosigners, m, n, network="mainnet", name=None):
         self.network = network
         self.mnemonic = mnemonic
         self.cosigners = cosigners
         self.m = m
         self.n = n
-        self.derivation = derivation
         self.name = f"wallet-{self.fingerprint}" if name is None else name
 
         # ensure bitcoind running
@@ -72,10 +69,10 @@ class Wallet:
             d = json.loads(f.read())
             cosigners_raw = d["cosigners"]
             cosigners = list(map(
-                lambda x: Cosigner(x["fingerprint"], x["xpub"], x["derivation"]),
+                lambda x: Cosigner(x["fingerprint"], x["xpub"]),
                 cosigners_raw
             ))
-            return cls(d["mnemonic"], cosigners, d["m"], d["n"], d["network"], d["derivation"], d["name"])
+            return cls(d["mnemonic"], cosigners, d["m"], d["n"], d["network"], d["name"])
 
     def createwallet(self):
         # list wallets (return if already exists)
@@ -89,7 +86,7 @@ class Wallet:
         # create descriptor without checksum
         desc = "wsh(sortedmulti(" + str(self.m) + ","
         desc += "[" + self.fingerprint + "]"
-        desc += self.xprv + self.derivation
+        desc += self.xprv + "/" # define derivation as m/change/idx
         desc += str(change) + "/*,"
         for i, cosigner in enumerate(self.cosigners):
             desc += "[" + cosigner.fingerprint + "]"
