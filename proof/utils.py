@@ -7,6 +7,16 @@ from proof.wallet import Wallet
 from os import listdir
 from os.path import isfile, join
 
+YELLOW_COLOR = 191
+GREEN_COLOR = 118
+RED_COLOR = 160
+
+fg = lambda text, color: "\33[38;5;" + str(color) + "m" + text + "\33[0m"
+bg = lambda text, color: "\33[48;5;" + str(color) + "m" + text + "\33[0m"
+
+def color_text(text, color, formatter):
+    return formatter(text, color)
+
 def format_rolls(arr):
     return " ".join(arr)
 
@@ -84,7 +94,7 @@ async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm
     selected = 0
     pointer = " --> "
     helptext = f"Press '{_next}' to go to the next element, '{prev}' to "
-    helptext += "go to the previous element, '{back}' to go exit this menu, and "
+    helptext += f"go to the previous element, '{back}' to go exit this menu, and "
     helptext += "[ENTER] to make the desired selection."
     while True:
         msg = f"{msg_prefix}\n\n{helptext}" + "\n\n"

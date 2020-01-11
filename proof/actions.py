@@ -275,6 +275,38 @@ Press [ENTER] to initiate the qr code scanner.
             fp = bip32.fingerprint(xpub)
             cosigner_xpubs.append((fp, xpub))
 
+async def view_receive_addresses(w):
+    title = "Proof Wallet: View Receive Addresses\n\n"
+    start = 0
+    N = 20
+    while True:
+        external = w.deriveaddresses(start, start + N - 1, 0)
+        internal = w.deriveaddresses(start, start + N - 1, 1)
+        msg = title
+        msg += f"Displaying receive and change addresses from index {start} to {start + N - 1}. "
+        msg += f"Press 'n' to view the next set of {N} addresses and 'p' for the "
+        msg += f"previous set of {N} addresses. Press 'x' to go back to the previous menu.\n\n"
+
+        # display receive addreses
+        msg += "Derivation | Receive Address\n"
+        for i, addr in enumerate(external):
+            msg += f"m{w.derivation}0/{str(i + start)} | "
+            msg += f"{color_text(addr, GREEN_COLOR, fg)}\n"
+
+        # display change addreses
+        msg += f"\nDerivation | Change Address\n"
+        for i, addr in enumerate(internal):
+            msg += f"m{w.derivation}1/{str(i + start)} | "
+            msg += f"{color_text(addr, YELLOW_COLOR, fg)}\n"
+
+        ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
+        if ch == 'n':
+            start = start + N
+        elif ch == 'p' and start > 0:
+            start = start - N
+        elif ch == 'x':
+            return
+
 async def wallet_menu(w):
     header = f"""Proof Wallet: Wallet Menu
 
