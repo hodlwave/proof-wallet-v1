@@ -39,16 +39,13 @@ async def home(network):
     while True:
         msg = "Proof Wallet: Home\n\n"
         msg += "1) Create wallet\n"
-        msg += "2) Finalize wallet\n"
-        msg += "3) Load wallet\n"
-        msg += "4) Exit\n"
+        msg += "2) Load wallet\n"
+        msg += "3) Exit\n"
         ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
         if ch == '1':
             await create_wallet(network)
         elif ch == '2':
-            await finalize_wallet()
-        elif ch == '3':
-            await load_wallet()
+            await load_wallet(network)
         else:
             sys.exit(0)
 
@@ -120,7 +117,7 @@ async def roll_dice():
         elif ch == 'd' and len(rolls) >= N:
             return list(map(int, rolls))
 
-async def computer_entropy_ui():
+async def computer_entropy():
     """
     Interaction for getting entropy from the computer,
     either directly or manually entering (if on Machine #2)
@@ -159,11 +156,12 @@ async def export_xpub(xpub):
     while True:
         msg = "The following QR code encodes your wallet's root xpub. "
         msg += "Scan it with your phone and transfer it to your online watch-only-wallet.\n\n"
-        msg += "If the QR code appears broken, try maximizing your terminal window, zooming out and pressing [ENTER].\n\n"
+        msg += "If the QR code appears broken, try maximizing your terminal window, zooming out and pressing [ENTER]. "
+        msg += "When you've finished scanning the QR code, press 'x' to go back to the last menu.\n\n"
         msg += xpub + "\n\n"
         msg += generate_qr(xpub)
-        ch = await ux_show_story(msg, None, ["\r", "q"])
-        if ch == 'q':
+        ch = await ux_show_story(msg, None, ["\r", "x"])
+        if ch == 'x':
             return
 
 async def sensitive_data_warning():
@@ -184,7 +182,7 @@ async def create_wallet(network):
     msg = title
     # roll dice > N times
     rolls = await roll_dice()
-    computer_entropy = await computer_entropy_ui()
+    computer_entropy = await computer_entropy()
     # get additional entropy from os
     dice_entropy = sha256(bytes(rolls)).digest()
     # xor dice & computer entropy to generate wallet xprv
@@ -232,23 +230,16 @@ Press [Enter] to return to the home menu.
 """
     return await ux_show_story(msg, None, ['\r'])
 
-async def finalize_wallet():
+async def finalize_wallet(w):
     title = "Proof Wallet: Finalize Wallet"
-    # choose wallet to finalize
-    all_wallets = get_all_wallets()
-    unfinished_wallets = list(filter(lambda w: len(w.cosigners) + 1 != w.n, all_wallets))
-    unfinished_names = list(map(lambda w: w.name, unfinished_wallets))
-    msg_prefix = f"{title}\n\nSelect a wallet to finalize"
-    idx = await choose_from_list(msg_prefix, unfinished_names)
-    w = unfinished_wallets[idx]
     # import N xpubs flow
     cosigner_xpubs = []
     while True:
         num_remaining = w.n - len(cosigner_xpubs) - 1
-        warning = "You have not yet imported any cosigner xpubs.\n" if len(cosigner_xpubs) == 0 else ""
-        cosigner_str = "cosigner | xpub\n" if len(cosigner_xpubs) > 0 else ""
+        warning = "\tYou have not yet imported any cosigner xpubs.\n" if len(cosigner_xpubs) == 0 else ""
+        cosigner_str = "\tcosigner | xpub\n" if len(cosigner_xpubs) > 0 else ""
         for (cosigner_fp, cosigner_xpub) in cosigner_xpubs:
-            cosigner_str += f"{cosigner_fp} | {cosigner_xpub}\n"
+            cosigner_str += f"\t{cosigner_fp} | {cosigner_xpub}\n"
 
         # check if wallet is complete
         if num_remaining == 0:
@@ -262,8 +253,7 @@ async def finalize_wallet():
 
 {cosigner_str}\
 
-You can now load this wallet in the 'Load Wallet' menu, and \
-use it to receive bitcoin and sign PSBTs.
+You can now use this wallet to receive bitcoin and sign PSBTs.
 
 Press [Enter] to return to the home menu.
 """
@@ -271,16 +261,72 @@ Press [Enter] to return to the home menu.
         # wallet is not yet complete
         msg = f"""{title}
 
-The following list shows the cosigner xpubs you have imported:
+This wallet has {w.n} total signers, so you have {num_remaining} xpubs \
+left to import. The following list shows the cosigner xpubs you have imported so far:
 
 {warning}{cosigner_str}\
-
-This wallet has {w.n} total signers, so you have {num_remaining} xpubs \
-left to import.
 
 Press [ENTER] to initiate the qr code scanner.
 """
         await ux_show_story(msg, None, ['\r'])
         xpub = await scan_qr()
-        fp = bip32.fingerprint(xpub)
-        cosigner_xpubs.append((fp, xpub))
+        # TODO: perform validations on xpub
+        if await import_data_warning(xpub):
+            fp = bip32.fingerprint(xpub)
+            cosigner_xpubs.append((fp, xpub))
+
+async def wallet_menu(w):
+    header = f"""Proof Wallet: Wallet Menu
+
+Wallet Name: {w.name}
+Policy: {w.m} of {w.n}
+Network: {w.network}
+Highest hardened derivation path: {"'" + "m" + w.derivation + "'"}
+
+"""
+    while True:
+        if is_complete(w):
+            msg = f"""{header}\
+What would you like to do?
+1) Export xpub
+2) View receive addresses
+3) Sign PSBT
+4) Go back
+"""
+            ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
+            if ch == '1':
+                await export_xpub(w.xpub)
+            elif ch == '2':
+                await view_receive_addresses(w)
+            elif ch == '3':
+                await sign_psbt(w)
+            else:
+                return
+        else:
+            msg = f"""{header}\
+What would you like to do?
+1) Export xpub
+2) Add cosigners to finalize wallet
+3) Go back
+"""
+            ch = await ux_show_story(msg, None, ['1', '2', '3'])
+            if ch == '1':
+                await export_xpub(w.xpub)
+            elif ch == '2':
+                await finalize_wallet(w)
+                # reload wallet in case it has been finalized
+                w = Wallet.load(w.name)
+            else:
+                return
+
+async def load_wallet(network):
+    title = "Proof Wallet: Load Wallet"
+    # choose wallet to finalize
+    msg_prefix = f"{title}\n\nChoose a {network} wallet to load"
+    wallets = list(filter(lambda w: w.network == network, get_all_wallets()))
+    wallet_names = list(map(lambda w: w.name + " " + ("[FINALIZED]" if is_complete(w) else "[NOT FINALIZED]"), wallets))
+    idx = await choose_from_list(msg_prefix, wallet_names)
+    if idx == None: # user wants to go back
+        return
+    w = wallets[idx]
+    return await wallet_menu(w)

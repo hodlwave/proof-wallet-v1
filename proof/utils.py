@@ -49,10 +49,13 @@ async def scan_qr():
         popen.wait()
         return stdout_line.rstrip('\n')
 
+def is_complete(w):
+    return len(w.cosigners) + 1 == w.n
+
 def get_all_wallets():
     path = Wallet.get_dir()
     wallet_files = [f for f in listdir(path) if isfile(join(path, f))]
-    return map(lambda f: Wallet.load(f), wallet_files)
+    return list(map(lambda f: Wallet.load(f), wallet_files))
 
 async def choose_from(msg_renderer, options, confirm = '\r', undo = 'u'):
     """
@@ -69,7 +72,7 @@ async def choose_from(msg_renderer, options, confirm = '\r', undo = 'u'):
         elif chosen is not None: # user is confirming choice
             return chosen    
 
-async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm = '\r'):
+async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm = '\r', back = 'x'):
     """
     Async utility that lets you choose from a list of items passed
     in. The list is rendered with an arrow pointing to the currently
@@ -81,16 +84,34 @@ async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm
     selected = 0
     pointer = " --> "
     helptext = f"Press '{_next}' to go to the next element, '{prev}' to "
-    helptext += "go to the previous element and [ENTER] to make the desired selection."
+    helptext += "go to the previous element, '{back}' to go exit this menu, and "
+    helptext += "[ENTER] to make the desired selection."
     while True:
         msg = f"{msg_prefix}\n\n{helptext}" + "\n\n"
         for i, opt in enumerate(options):
             prefix = pointer if i == selected else len(pointer) * " "
             msg += prefix + options[i] + "\n"
-        ch = await ux_show_story(msg, None, [_next, prev, confirm])
+        ch = await ux_show_story(msg, None, [_next, prev, confirm, back])
         if ch == _next and selected < len(options) - 1:
             selected += 1
         elif ch == prev and selected > 0:
             selected -= 1
         elif ch == confirm:
             return selected
+        if ch == back:
+            return None
+
+async def import_data_warning(data):
+    msg = f"""Proof Wallet: Import Data Warning
+
+You have scanned a QR code that represents the following data:
+
+{data}
+
+Press [Enter] to confirm that this is the data you wanted to import. \
+Press 'x' to abort this import.
+"""
+    ch = await ux_show_story(msg, None, ['\r', 'x'])
+    if ch == '\r':
+        return True
+    return False
