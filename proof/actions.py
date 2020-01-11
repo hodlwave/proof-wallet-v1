@@ -117,7 +117,7 @@ async def roll_dice():
         elif ch == 'd' and len(rolls) >= N:
             return list(map(int, rolls))
 
-async def computer_entropy():
+async def get_computer_entropy():
     """
     Interaction for getting entropy from the computer,
     either directly or manually entering (if on Machine #2)
@@ -182,7 +182,7 @@ async def create_wallet(network):
     msg = title
     # roll dice > N times
     rolls = await roll_dice()
-    computer_entropy = await computer_entropy()
+    computer_entropy = await get_computer_entropy()
     # get additional entropy from os
     dice_entropy = sha256(bytes(rolls)).digest()
     # xor dice & computer entropy to generate wallet xprv
