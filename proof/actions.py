@@ -8,6 +8,7 @@ from binascii import hexlify
 from proof.ux import ux_show_story
 from proof.wallet import Wallet, Cosigner
 from proof.utils import *
+from proof.constants import *
 from crypto.mnemonic import Mnemonic
 from crypto import bip32
 
@@ -363,6 +364,83 @@ async def load_wallet(network):
     w = wallets[idx]
     return await wallet_menu(w)
 
+async def display_psbt(w, psbt):
+    tx = psbt[PSBT_TX]
+    txid = tx[PSBT_TX_TXID]
+    num_vin = len(tx[PSBT_TX_VIN])
+    num_vout = len(tx[PSBT_TX_VOUT])
+    fee = psbt[PSBT_FEE]
+
+    # Render inputs
+    def parse_input(psbt, idx):
+        txid = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_TXID]
+        vout = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_VOUT]
+        addr = psbt[PSBT_INPUTS][idx][PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_ADDRESS]
+        amount = psbt[PSBT_INPUTS][idx][PSBT_WITNESS_UTXO][PSBT_AMOUNT]
+        return (txid, vout, addr, amount)
+    inputs = list(map(lambda i: parse_input(psbt, i), range(num_vin)))
+    inputs_str = f"Inputs ({num_vin})\n"
+    for txid, vout, addr, amount in inputs:
+        txid_formatted = txid[:10] + "..." + txid[-10:]
+        addr_colored = color_text(addr, GREEN_COLOR, fg)
+        inputs_str += f"{txid_formatted}:{vout}\t{addr_colored}\t{amount}\n"
+
+    # Render outputs
+    def parse_output(psbt, idx):
+        change = PSBT_BIP32_DERIVS in psbt[PSBT_OUTPUTS][idx]
+        [addr] = psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_SCRIPTPUBKEY][PSBT_TX_ADDRESSES]
+        value = psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_TX_VALUE]
+        return (addr, value, change)
+    outputs = list(map(lambda i: parse_output(psbt, i), range(num_vout)))
+    outputs_str = f"Outputs ({num_vout})\n"
+    for addr, value, change in outputs:
+        addr_colored = color_text(addr, YELLOW_COLOR, fg) if change else addr
+        outputs_str += f"{addr_colored}\t{value}\n"
+    msg = f"""Proof Wallet: Sign PSBT [View & Sign]
+
+Transaction ID: {txid}
+Transaction Fee: {'%f' % fee}
+
+{inputs_str}
+{outputs_str}
+
+Press [Enter] to sign the transaction and proceed to the QR code export step.
+Press 'x' to abort the signing process and return to the Wallet Menu.
+"""
+    return await ux_show_story(msg, None, ["\r", 'x'])
+
+async def export_psbt(psbt):
+    CHUNK_SIZE = 200 # don't display a QR code larger than CHUNK_SIZE bytes
+    chunked = [
+        # get chunk of bytes, convert to base64 bytes and decode to string
+        psbt[i: i + CHUNK_SIZE]
+        for i in range(0, len(psbt), CHUNK_SIZE)
+    ]
+    i = 0
+    while True:
+        msg = f"""Proof Wallet: Sign PSBT [Export]
+
+The following QR code is part {i+1}/{len(chunked)} of the PSBT you signed. \
+You should scan each part with your phone and transfer them to a watch-only-wallet, \
+where you can recombine the parts and combine them with other PSBTs you've \
+signed, finalize the transaction, and broadcast it to the Bitcoin network.
+
+Controls:
+'n' -- view next QR code
+'p' -- view previous QR code
+'x' -- go back Wallet menu
+
+{chunked[i]}\n\n
+{generate_qr(chunked[i])}
+"""
+        ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
+        if ch == 'n' and i < len(chunked) - 1:
+            i += 1
+        elif ch == 'p' and i > 0:
+            i -= 1
+        elif ch == 'x':
+            return
+
 async def sign_psbt(w):
     # import psbt in chunks via QR code
     psbt_raw_lst = []
@@ -431,6 +509,17 @@ PSBT you imported for the given wallet {w.name}. Press [Enter] to proceed and \
         return
 
     # display transaction summary and allow user to sign
+    psbt = psbt_validation["psbt"]
+    ch = await display_psbt(w, psbt)
+    if ch == 'x':
+        return
+
+    # sign the psbt
+    psbt_processed = w.walletprocesspsbt(
+        psbt_raw,
+        psbt_validation["importmulti_lo"],
+        psbt_validation["importmulti_hi"]
+    )
 
     # export signed psbt in chunks via QR code
-    return
+    await export_psbt(psbt_processed["psbt"])

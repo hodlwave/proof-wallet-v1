@@ -151,7 +151,10 @@ def validate_psbt(psbt_raw, w):
     response = {
         "success": [],
         "warning": [],
-        "error": []
+        "error": [],
+        "psbt": None,
+        "importmulti_lo": None,
+        "importmulti_hi": None
     }
     try:
         # attempt to decode psbt
@@ -187,6 +190,11 @@ def validate_psbt(psbt_raw, w):
                 response["error"].append(f"Tx input {i} contains an unsupported bip32 derivation path: {input_path}.")
                 return response
             change, idx = map(int, match_object.groups())
+            # Update limits for impormulti command
+            if response["importmulti_lo"] is None or response["importmulti_lo"] > idx:
+                response["importmulti_lo"] = idx
+            if response["importmulti_hi"] is None or response["importmulti_hi"] < idx:
+                response["importmulti_hi"] = idx
             [expected_address] = w.deriveaddresses(idx, idx, change)
             if expected_address != actual_address:
                 response["error"].append(f"Tx input {i} contains an incorrect address based on the supplied bip32 derivation metadata.")
@@ -232,6 +240,7 @@ def validate_psbt(psbt_raw, w):
         if len(change_indexes) == 0:
             response["warning"].append(f"No change outputs were identified in this Tx. If you intended to send change back to your wallet, you should abort this signing process.")
         response["success"].append("All output validations succeeded.")
+        response["psbt"] = psbt
     except subprocess.CalledProcessError:
         response["error"].append("The provided base64 encoded input is NOT a valid PSBT.")
     except:

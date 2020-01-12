@@ -1,5 +1,6 @@
 import json
 import os
+import subprocess
 from proof.bitcoind import BitcoindAdapter
 from crypto.mnemonic import Mnemonic
 from crypto import bip32
@@ -10,7 +11,7 @@ class Cosigner:
         self.fingerprint = fingerprint
         # account extended public key associated with highest hardened derivation
         self.xpub = xpub
-        
+
 class Wallet:
     def __init__(self, mnemonic, cosigners, m, n, network="mainnet", name=None):
         self.network = network
@@ -24,13 +25,13 @@ class Wallet:
         self.adapter.ensure_bitcoind_running()
         # create wallet
         self.createwallet()
-        
+
     @property
     def xprv(self):
         M = Mnemonic()
         seed = M.to_seed(self.mnemonic)
         return M.to_hd_master_key(seed, self.adapter.network)
-        
+
     @property
     def xpub(self):
         desc = f"pk({self.xprv})"
@@ -75,12 +76,16 @@ class Wallet:
             return cls(d["mnemonic"], cosigners, d["m"], d["n"], d["network"], d["name"])
 
     def createwallet(self):
-        # list wallets (return if already exists)
+        # list wallets (return if already loaded)
         wallets = self.adapter.bitcoin_cli_json("listwallets")
         if self.name in wallets:
             return
-        # create wallet with private keys disabled
-        self.adapter.bitcoin_cli_checkoutput("createwallet", self.name, "false")
+        try:
+            # try loading the wallet if it already exists
+            return self.adapter.bitcoin_cli_json("loadwallet",  self.name)
+        except subprocess.CalledProcessError:
+            # create wallet with private keys disabled
+            self.adapter.bitcoin_cli_checkoutput("createwallet", self.name, "false")
 
     def wsh_descriptor(self, change = 0):
         # create descriptor without checksum
@@ -120,5 +125,8 @@ class Wallet:
     def decodepsbt(self, psbt):
         return self.adapter.bitcoin_cli_json("decodepsbt", psbt)
     
-    def walletprocesspsbt(self, psbt):
+    def walletprocesspsbt(self, psbt, importmulti_lo=None, importmulti_hi=None):
+        if importmulti_lo is not None and importmulti_hi is not None:
+            # import the descriptors necessary to process the provided psbt
+            self.importmulti(importmulti_lo, importmulti_hi)
         return self.adapter.bitcoin_cli_json(f"-rpcwallet={self.name}", "walletprocesspsbt", psbt)
