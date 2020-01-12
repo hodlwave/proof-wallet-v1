@@ -1,5 +1,6 @@
 import os
 import subprocess
+import re
 from binascii import hexlify
 from tempfile import NamedTemporaryFile
 from proof.ux import ux_show_story
@@ -7,8 +8,10 @@ from proof.wallet import Wallet
 from os import listdir
 from os.path import isfile, join
 
+from proof.constants import *
+
 YELLOW_COLOR = 191
-GREEN_COLOR = 118
+GREEN_COLOR = 2
 RED_COLOR = 160
 
 fg = lambda text, color: "\33[38;5;" + str(color) + "m" + text + "\33[0m"
@@ -126,6 +129,16 @@ Press 'x' to abort this import.
         return True
     return False
 
+def wallet_fingerprints(w):
+    """
+    Returns the set of fingerprints for every signatory
+    of the wallet. Fingerprints are converted to lowercase
+    consistent with Bitcoin Core
+    """
+    out = set(map(lambda w: w.fingerprint.lower(), w.cosigners))
+    out.add(w.fingerprint.lower())
+    return out
+
 def validate_psbt(psbt_raw, w):
     """
     Validates that the psbt is safe to sign based on
@@ -138,12 +151,89 @@ def validate_psbt(psbt_raw, w):
     response = {
         "success": [],
         "warning": [],
-        "errors": []
+        "error": []
     }
     try:
         # attempt to decode psbt
         psbt = w.decodepsbt(psbt_raw)
+        pattern = "m/([01])/([0-9]+)"
         response["success"].append("The provided base64 encoded input is a valid PSBT.")
+        # INPUTS VALIDATION
+        fps = set(wallet_fingerprints(w))
+        for i, _input in enumerate(psbt[PSBT_INPUTS]):
+            if PSBT_NON_WITNESS_UTXO in _input or PSBT_WITNESS_UTXO not in _input:
+                response["error"].append(f"Tx input {i} doesn't spend the expected segwit utxo.")
+                return response
+            if PSBT_BIP32_DERIVS not in _input:
+                response["error"].append(f"Tx input {i} does not contain bip32 derivation metadata.")
+                return response
+            input_fps = set(map(lambda deriv: deriv[PSBT_BIP32_MASTER_FP], _input[PSBT_BIP32_DERIVS]))
+            if fps != input_fps:
+                response["error"].append(f"Tx input {i} does not have our set of wallet fingerprints.")
+                return response
+            scriptpubkey_type = _input[PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_TYPE]
+            if scriptpubkey_type != PSBT_WSH_TYPE:
+                response["error"].append(f"Tx input {i} contains an incorrect scriptPubKey type: {scriptpubkey_type}.")
+                return response
+            actual_address = _input[PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_ADDRESS]
+            # verify bip32_derivs path invariants
+            input_paths = set(map(lambda deriv: deriv[PSBT_BIP32_PATH], _input[PSBT_BIP32_DERIVS]))
+            if len(input_paths) > 1: # |_input_paths| can't be zero because already asserted fingerprint set is nonempty
+                response["error"].append(f"Tx input {i} contains multiple DIFFERENT bip32 derivation paths.")
+                return response
+            input_path = input_paths.pop()
+            match_object = re.match(pattern, input_path)
+            if match_object is None:
+                response["error"].append(f"Tx input {i} contains an unsupported bip32 derivation path: {input_path}.")
+                return response
+            change, idx = map(int, match_object.groups())
+            [expected_address] = w.deriveaddresses(idx, idx, change)
+            if expected_address != actual_address:
+                response["error"].append(f"Tx input {i} contains an incorrect address based on the supplied bip32 derivation metadata.")
+                return response
+        response["success"].append("All input validations succeeded.")
+
+        # OUTPUTS VALIDATION
+        tx = psbt[PSBT_TX]
+        change_indexes = []
+        for i, output in enumerate(psbt[PSBT_OUTPUTS]):
+            tx_out = tx[PSBT_TX_VOUT][i]
+            if PSBT_BIP32_DERIVS not in output:
+                # consider this output as not part of this wallet not an error or
+                # warning as this could be a valid output spend
+                continue
+            output_fps = set(map(lambda deriv: deriv[PSBT_BIP32_MASTER_FP], output[PSBT_BIP32_DERIVS]))
+            if fps != output_fps:
+                response["error"].append(f"Tx output {i} does not have our set of wallet fingerprints.")
+                return response
+            scriptpubkey_type = tx_out[PSBT_SCRIPTPUBKEY][PSBT_TYPE]
+            if scriptpubkey_type != PSBT_WSH_TYPE:
+                response["error"].append(f"Tx output {i} contains an incorrect scriptPubKey type: {scriptpubkey_type}.")
+                return response
+            [actual_address] = tx_out[PSBT_SCRIPTPUBKEY][PSBT_TX_ADDRESSES]
+            # verify bip32_derivs path invariants
+            output_paths = set(map(lambda deriv: deriv[PSBT_BIP32_PATH], output[PSBT_BIP32_DERIVS]))
+            if len(output_paths) > 1: # |output_paths| can't be zero because already asserted fingerprint set is nonempty
+                response["error"].append(f"Tx output {i} contains multiple DIFFERENT bip32 derivation paths.")
+                return response
+            output_path = output_paths.pop()
+            match_object = re.match(pattern, output_path)
+            if match_object is None:
+                response["error"].append(f"Tx output {i} contains an unsupported bip32 derivation path: {output_path}.")
+                return response
+            change, idx = map(int, match_object.groups())
+            if change == 0:
+                response["warning"].append(f"Tx output {i} spends change to an external receive address.")
+            [expected_address] = w.deriveaddresses(idx, idx, change)
+            if expected_address != actual_address:
+                response["error"].append(f"Tx output {i} spends bitcoin to an incorrect address based on the supplied bip32 derivation metadata.")
+                return response
+            change_indexes.append(i) # change validations pass
+        if len(change_indexes) == 0:
+            response["warning"].append(f"No change outputs were identified in this Tx. If you intended to send change back to your wallet, you should abort this signing process.")
+        response["success"].append("All output validations succeeded.")
     except subprocess.CalledProcessError:
-        response["errors"].append("The provided base64 encoded input is NOT a valid PSBT.")
+        response["error"].append("The provided base64 encoded input is NOT a valid PSBT.")
+    except:
+        response["error"].append("An unexpected error occurred during the PSBT validation process")
     return response

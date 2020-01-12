@@ -362,3 +362,75 @@ async def load_wallet(network):
         return
     w = wallets[idx]
     return await wallet_menu(w)
+
+async def sign_psbt(w):
+    # import psbt in chunks via QR code
+    psbt_raw_lst = []
+    while True:
+        psbt_str = ""
+        for part in psbt_raw_lst:
+            psbt_str += f"\t{part}\n\n"
+        msg = f"""Proof Wallet: Sign PSBT [Import]
+
+Import the incomplete Base64 encoded PSBT via QR code. If the PSBT is too large \
+to fit in a single QR code, you can import the data chunk-by-chunk with multiple \
+QR codes. Ensure that each QR code you import has the intended data before confirming.
+
+Controls:
+[Enter] --  activate the QR scanner to import the next piece of data
+'d'     -- decode the PSBT once the data has been imported completely
+'u'     -- undo the last imported piece of data.
+'x'     -- abort this import altogether
+
+Below are the individual PSBT chunks you have imported so far:
+
+{"You have not yet imported any parts of a PSBT" if len(psbt_raw_lst) == 0 else psbt_str}
+"""
+        ch = await ux_show_story(msg, None, ['\r', 'd', 'u', 'x'])
+        if ch == '\r':
+            chunk = await scan_qr()
+            psbt_raw_lst.append(chunk)
+        elif ch == 'd' and len(psbt_raw_lst) > 0:
+            break
+        elif ch == 'u' and len(psbt_raw_lst) > 0:
+            psbt_raw_lst.pop()
+        else:
+            return
+
+    # perform validations on psbt
+    psbt_raw = "".join(psbt_raw_lst)
+    psbt_validation = validate_psbt(psbt_raw, w)
+    # display result of validations
+    success = len(psbt_validation["error"]) == 0
+    success_str = "SUCCESSFUL" if success else "NOT SUCCESSFUL"
+    SUCCESS_COLOR = GREEN_COLOR if success else RED_COLOR
+    validation_result = color_text(f"PSBT validation was {success_str}", SUCCESS_COLOR, bg)
+    if success:
+        summary = "Successful validations:\n"
+        for successful_validation in psbt_validation["success"]:
+            summary += f"* {color_text(successful_validation, GREEN_COLOR, fg)}\n"
+        if len(psbt_validation["warning"]) > 0:
+            summary += "\nValidation warnings:\n"
+            for warning in psbt_validation["warning"]:
+                summary += f"* {warning}\n"
+    else:
+        summary = "Validation error:\n"
+        summary += f"* {psbt_validation['error'][0]}"
+    msg = f"""Proof Wallet: Sign PSBT [Validate]
+
+The following are the results of the internal validations performed on the \
+PSBT you imported for the given wallet {w.name}. Press [Enter] to proceed and \
+'x' to abort.
+
+{validation_result}
+
+{summary}
+"""
+    ch = await ux_show_story(msg, None, ['\r', 'x'])
+    if not success or ch == 'x':
+        return
+
+    # display transaction summary and allow user to sign
+
+    # export signed psbt in chunks via QR code
+    return
