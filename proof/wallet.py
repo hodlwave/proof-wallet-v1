@@ -15,14 +15,15 @@ class Cosigner:
 class Wallet:
     def __init__(self, mnemonic, cosigners, m, n, network="mainnet", name=None):
         self.network = network
+        # ensure bitcoind running
+        self.adapter.ensure_bitcoind_running()
+
         self.mnemonic = mnemonic
         self.cosigners = cosigners
         self.m = m
         self.n = n
         self.name = f"wallet-{self.fingerprint}" if name is None else name
 
-        # ensure bitcoind running
-        self.adapter.ensure_bitcoind_running()
         # create wallet
         self.createwallet()
 

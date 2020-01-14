@@ -70,22 +70,7 @@ def get_all_wallets():
     wallet_files = [f for f in listdir(path) if isfile(join(path, f))]
     return list(map(lambda f: Wallet.load(f), wallet_files))
 
-async def choose_from(msg_renderer, options, confirm = '\r', undo = 'u'):
-    """
-    Async utility for choosing from among multiple options (keys),
-    with a provided story, confirmation & undo keys
-    """
-    chosen = None
-    while True:
-        ch = await ux_show_story(msg_renderer(chosen), None,  options + [confirm, undo])
-        if ch in options:
-            chosen = ch
-        elif ch == undo and chosen is not None: # reset chosen
-            chosen = None
-        elif chosen is not None: # user is confirming choice
-            return chosen    
-
-async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm = '\r', back = 'x'):
+async def choose_from_list(msg_prefix, options):
     """
     Async utility that lets you choose from a list of items passed
     in. The list is rendered with an arrow pointing to the currently
@@ -96,22 +81,25 @@ async def choose_from_list(msg_prefix, options, _next = 'n', prev = 'p', confirm
     """
     selected = 0
     pointer = " --> "
-    helptext = f"Press '{_next}' to go to the next element, '{prev}' to "
-    helptext += f"go to the previous element, '{back}' to go exit this menu, and "
-    helptext += "[ENTER] to make the desired selection."
+    controls = """Controls:
+[Enter] -- make selection
+'n'     -- next item in list
+'p'     -- previous item in list
+'x'     -- go back
+"""
     while True:
-        msg = f"{msg_prefix}\n\n{helptext}" + "\n\n"
+        msg = f"{msg_prefix}\n\n{controls}\n\n"
         for i, opt in enumerate(options):
             prefix = pointer if i == selected else len(pointer) * " "
             msg += prefix + options[i] + "\n"
-        ch = await ux_show_story(msg, None, [_next, prev, confirm, back])
-        if ch == _next and selected < len(options) - 1:
+        ch = await ux_show_story(msg, None, ['n', 'p', '\r', 'x'])
+        if ch == 'n' and selected < len(options) - 1:
             selected += 1
-        elif ch == prev and selected > 0:
+        elif ch == 'p' and selected > 0:
             selected -= 1
-        elif ch == confirm:
+        elif ch == '\r':
             return selected
-        if ch == back:
+        elif ch == 'x':
             return None
 
 async def import_data_warning(data):
@@ -159,7 +147,7 @@ def validate_psbt(psbt_raw, w):
     try:
         # attempt to decode psbt
         psbt = w.decodepsbt(psbt_raw)
-        pattern = "m/([01])/([0-9]+)"
+        pattern = "^m/([01])/(0|[1-9][0-9]*)$" # match m/{change}/{idx} and prevent leading zeros
         response["success"].append("The provided base64 encoded input is a valid PSBT.")
         # INPUTS VALIDATION
         fps = set(wallet_fingerprints(w))
