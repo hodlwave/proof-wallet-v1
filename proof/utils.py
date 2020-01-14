@@ -1,13 +1,13 @@
 import os
 import subprocess
 import re
-from binascii import hexlify
+from binascii import hexlify, unhexlify
+from hashlib import sha256
 from tempfile import NamedTemporaryFile
 from proof.ux import ux_show_story
 from proof.wallet import Wallet
 from os import listdir
 from os.path import isfile, join
-
 from proof.constants import *
 
 YELLOW_COLOR = 191
@@ -162,9 +162,28 @@ def validate_psbt(psbt_raw, w):
             if fps != input_fps:
                 response["error"].append(f"Tx input {i} does not have our set of wallet fingerprints.")
                 return response
+            if PSBT_SCRIPTPUBKEY not in _input[PSBT_WITNESS_UTXO]:
+                response["error"].append(f"Tx input {i} does not have a scriptPubKey.")
+                return response
             scriptpubkey_type = _input[PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_TYPE]
             if scriptpubkey_type != PSBT_WSH_TYPE:
                 response["error"].append(f"Tx input {i} contains an incorrect scriptPubKey type: {scriptpubkey_type}.")
+                return response
+            # ensure psbt has a witness script and that the scriptPubKey is the hash of the witness script
+            if PSBT_WITNESS_SCRIPT not in _input:
+                response["error"].append(f"Tx input {i} doesn't contain a witness script")
+                return response
+            witness_script = _input[PSBT_WITNESS_SCRIPT][PSBT_HEX]
+            witness_script_hash = hexlify(sha256(unhexlify(witness_script)).digest()).decode()
+            scriptPubKeyParts = _input[PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_ASM].split(" ")
+            if len(scriptPubKeyParts) != 2:
+                response["error"].append(f"Tx input {i} has an unexpected scriptPubKey")
+                return response
+            if scriptPubKeyParts[0] != "0":
+                response["error"].append(f"Tx input {i} has an unsupported scriptPubKey version: {scriptPubKeyParts[0]}.")
+                return response
+            if witness_script_hash != scriptPubKeyParts[1]:
+                response["error"].append(f"The hash of the witness script for Tx input {i} does not match the provided witness UTXO scriptPubKey.")
                 return response
             actual_address = _input[PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_ADDRESS]
             # verify bip32_derivs path invariants
@@ -186,6 +205,10 @@ def validate_psbt(psbt_raw, w):
             [expected_address] = w.deriveaddresses(idx, idx, change)
             if expected_address != actual_address:
                 response["error"].append(f"Tx input {i} contains an incorrect address based on the supplied bip32 derivation metadata.")
+                return response
+            # check sighash
+            if PSBT_SIGHASH in _input and _input[PSBT_SIGHASH] != SIGHASH_ALL:
+                response["error"].append(f"Tx input {i} specifies an unsupported sighash, '{_input[PSBT_SIGHASH]}'. The only supported sighash is {SIGHASH_ALL}")
                 return response
         response["success"].append("All input validations succeeded.")
 
