@@ -153,7 +153,7 @@ async def get_computer_entropy():
 Enter the entropy generated from the other Proof Wallet computer below.
 
 You should only have to enter 16 groups of 4 characters, specifically digits \
-{0, 1, 2, 3, 4, 5, 6, 7, 8, 9} and letters {a, b, c, d, e, f}.
+0, 1, 2, 3, 4, 5, 6, 7, 8, 9 and letters 'a', 'b', 'c', 'd', 'e', 'f'.
 
 Controls
 [0-9, a-e] -- enter character entropy
@@ -195,15 +195,12 @@ async def sensitive_data_warning():
     await ux_show_story(msg, None, ["\r"])
 
 async def create_wallet(network):
-    title = "Proof Wallet: Create Wallet\n\n"
-
     # ask user for desired M and N
     policy = await choose_policy()
     if policy is None: # user canceled selection
         return
     M, N = policy
 
-    msg = title
     # roll dice > N times
     rolls = await roll_dice()
     if rolls is None:
@@ -224,40 +221,43 @@ async def create_wallet(network):
 
     await sensitive_data_warning()
 
-    msg = title
-    msg += f"Policy: {M} of {N} (M of N)\n\n"
-    msg += "Dice rolls\n\n"
+    rolls_str = ""
     for i in range(len(rolls) // 10 + 1):
-        msg += f"Rolls {10*i + 1} to {10*i + 10}: "
-        msg += format_rolls(map(str, rolls[10*i : 10*i + 10]))
-        msg += "\n"
-    msg += "\nComputer entropy\n" + pprint_entropy(computer_entropy)
-    msg += "\n\n24 Word Mnemonic\n" + mnemonic
-    msg += "\n\nIf this is the first computer in the Proof Wallet protocol, you should "
-    msg += "enter the above dice rolls and computer-generated entropy into the second machine "
-    msg += "to ensure that the same wallet mnemonic phrase is generated. If a different phrase "
-    msg += "is generated, you should first try to repeat the process, and if that doesn't work, "
-    msg += "STOP this process (press [q]), and seek help from a knowledgable party.\n\n"
-    msg += "If both mnemonics match, you can proceed to export the root xpub on the following screen by pressing [Enter]"
-    ch = await ux_show_story(msg, None, ['q', '\r'])
-    if ch == 'q':
-        sys.exit(0)
-    # export root xpub via qr
-    w = Wallet(mnemonic, [], M, N, network)
-    await export_xpub(w.xpub)
-    w.save()
-    msg = f"""{title}\
-The wallet skeleton data has been saved locally on this computer. \
-Once you've constructed all {N} (i.e. N) of your multisignature wallets and \
-exported their xpubs, you can load this wallet in the 'Load Wallet' \
-menu and import the other {N-1} (i.e. N-1) xpubs to finalize this wallet.
+        rolls_str += f"Rolls {10*i + 1} to {10*i + 10}: "
+        rolls_str += format_rolls(map(str, rolls[10*i : 10*i + 10]))
+        rolls_str += "\n"
+    msg = f"""Proof Wallet: Create Wallet
 
-Note that this wallet will be listed as {w.name} in the 'Load Wallet' \
-menu.
+Policy: {M} of {N} (M of N)
+Dice rolls\n
+{rolls_str}
 
-Press [Enter] to return to the home menu.
+Computer entropy
+{pprint_entropy(computer_entropy)}
+
+24 Word Mnemonic
+{mnemonic}
+
+If this is the first computer in the Proof Wallet protocol, you should \
+enter the above dice rolls and computer-generated entropy into the second machine \
+to ensure that the same wallet mnemonic phrase is generated. If a different phrase \
+is generated, you should first try to repeat the process, and if that doesn't work, \
+abort this process immediately and seek help from a knowledgable party.
+
+If both mnemonics match, you can proceed to this wallet's menu where you'll be able \
+to export its extended public key and finalize it by importing cosigner extended public \
+keys.
+
+Controls
+'x'     -- Abort wallet creation process
+[Enter] -- Save wallet and proceed to this wallet's menu
 """
-    return await ux_show_story(msg, None, ['\r'])
+    ch = await ux_show_story(msg, None, ['x', '\r'])
+    if ch == 'x':
+        return
+    w = Wallet(mnemonic, [], M, N, network)
+    w.save()
+    return await wallet_menu(w)
 
 async def finalize_wallet(w):
     title = "Proof Wallet: Finalize Wallet"
