@@ -295,11 +295,29 @@ left to import. The following list shows the cosigner xpubs you have imported so
 
 {warning}{cosigner_str}\
 
-Press [ENTER] to initiate the qr code scanner.
+Controls:
+[Enter] -- initiate the qr code scanner
+'x'     -- abort finalize wallet process
 """
-        await ux_show_story(msg, None, ['\r'])
+        ch = await ux_show_story(msg, None, ['\r', 'x'])
+        if ch == 'x':
+            return
         xpub = await scan_qr()
-        # TODO: perform validations on xpub
+        if not is_valid_xpub(xpub, w.network):
+            msg = f"""{title}
+
+Import Error
+The data you attempted to import {xpub} is not a valid extended \
+public key.
+
+Controls:
+[Enter] -- retry the import
+'x'     -- abort finalize wallet process
+"""
+            ch = await ux_show_story(msg, None, ['\r', 'x'])
+            if ch == '\r':
+                continue
+            return
         if await import_data_warning(xpub):
             fp = bip32.fingerprint(xpub)
             cosigner_xpubs.append((fp, xpub))

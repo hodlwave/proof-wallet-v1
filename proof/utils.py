@@ -6,6 +6,7 @@ from hashlib import sha256
 from tempfile import NamedTemporaryFile
 from proof.ux import ux_show_story
 from proof.wallet import Wallet
+from proof.bitcoind import BitcoindAdapter
 from os import listdir
 from os.path import isfile, join
 from proof.constants import *
@@ -126,6 +127,15 @@ def wallet_fingerprints(w):
     out = set(map(lambda w: w.fingerprint.lower(), w.cosigners))
     out.add(w.fingerprint.lower())
     return out
+
+def is_valid_xpub(xpub, network):
+    adapter = BitcoindAdapter(network)
+    desc = f"pk({xpub})"
+    try:
+        adapter.bitcoin_cli_checkoutput("getdescriptorinfo", desc)
+        return True
+    except subprocess.CalledProcessError:
+        return False
 
 def validate_psbt(psbt_raw, w):
     """
