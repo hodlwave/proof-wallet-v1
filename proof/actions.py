@@ -7,6 +7,7 @@ from binascii import hexlify
 
 from proof.ux import ux_show_story
 from proof.wallet import Wallet, Cosigner
+from proof.trie import Trie
 from proof.utils import *
 from proof.constants import *
 from crypto.mnemonic import Mnemonic
@@ -172,6 +173,69 @@ Controls
                     return bytes("".join(digits), "utf-8")
                 else:
                     continue
+
+async def choose_bip39_words():
+    # build Trie of bip39 wordlist
+    curdir = os.path.dirname(__file__)
+    f =  open(f"{curdir}/../crypto/english.txt", "r", encoding="utf-8")
+    wordlist = [w.strip() for w in f.readlines()]
+    trie = Trie()
+    for word in wordlist:
+        trie.add(word)
+    # choose 24 words to create a complete mnemonic
+    mnemonic = []
+    cur = trie
+    prefix = ""
+    while len(mnemonic) < 24: # escape when the mnemonic is complete
+        msg_prefix = f"""Proof Wallet: Restore Wallet
+
+Selected words: {" ".join(mnemonic)}
+
+Choose word #{len(mnemonic) + 1}:
+"""
+        options = []
+        items = list(cur.children.items())
+        for c, child_trie in items:
+            # child trie contains one word
+            # child trie contains multiple direct children
+            # child trie contains multiple indirect
+            suffix = c
+            tmp = child_trie
+            while tmp.word_finished == False and len(tmp.children.items()) == 1:
+                next_char, tmp_child = list(tmp.children.items())[0]
+                suffix += next_char
+                tmp = tmp_child
+            if not tmp.word_finished: # multiple possible prefixes
+                options.append( (prefix + suffix + "*", c, False) )
+            elif len(tmp.children) == 0: # word is finished and no other prefixes below
+                options.append( (prefix + suffix, c, True) )
+            else: # word is finished and there are other prefixes
+                options.append( (prefix + suffix, c, True) )
+                options.append( (prefix + suffix + "*", c, False) )
+        idx = await choose_from_list(msg_prefix, list(map(lambda x: x[0], options)))
+        if idx is None and cur.parent is not None: # go up a level
+            cur = cur.parent
+            prefix = prefix[:-1]
+        elif idx is None and len(mnemonic) > 0: # remove last chosen word
+            mnemonic.pop()
+            cur = trie
+            prefix = ""
+        elif idx is None: # return to last menu
+            return None
+        else:
+            chosen_str, c, finished = options[idx]
+            child_trie = cur.children[c]
+            prefix += c
+            while child_trie.word_finished == False and len(child_trie.children.items()) == 1:
+                next_char, child_trie = list(child_trie.children.items())[0]
+                prefix += next_char
+            if finished:
+                mnemonic.append(prefix)
+                cur = trie
+                prefix = ""
+            else:
+                cur = child_trie
+    return mnemonic
 
 async def export_xpub(xpub):
     while True:
