@@ -94,10 +94,10 @@ async def choose_from_list(msg_prefix, options):
             prefix = pointer if i == selected else len(pointer) * " "
             msg += prefix + options[i] + "\n"
         ch = await ux_show_story(msg, None, ['n', 'p', '\r', 'x'])
-        if ch == 'n' and selected < len(options) - 1:
-            selected += 1
-        elif ch == 'p' and selected > 0:
-            selected -= 1
+        if ch == 'n':
+            selected = (selected + 1) % len(options)
+        elif ch == 'p':
+            selected = (selected - 1) % len(options)
         elif ch == '\r':
             return selected
         elif ch == 'x':

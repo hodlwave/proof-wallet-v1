@@ -42,12 +42,15 @@ async def home(network):
         msg = "Proof Wallet: Home\n\n"
         msg += "1) Create wallet\n"
         msg += "2) Load wallet\n"
-        msg += "3) Exit\n"
+        msg += "3) Restore wallet\n"
+        msg += "4) Exit\n"
         ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
         if ch == '1':
             await create_wallet(network)
         elif ch == '2':
             await load_wallet(network)
+        elif ch == '3':
+            await restore_wallet(network)
         else:
             sys.exit(0)
 
@@ -235,7 +238,7 @@ Choose word #{len(mnemonic) + 1}:
                 prefix = ""
             else:
                 cur = child_trie
-    return mnemonic
+    return " ".join(mnemonic)
 
 async def export_xpub(xpub):
     while True:
@@ -257,6 +260,48 @@ async def sensitive_data_warning():
     msg += "* TODO: Copy Glacier Protocol Setup Protocol steps (Section VI)"
     msg += "\n\nPress [Enter] once you are ready to proceed"
     await ux_show_story(msg, None, ["\r"])
+
+async def restore_wallet(network):
+    # ask user for desired M and N
+    policy = await choose_policy()
+    if policy is None: # user canceled selection
+        return
+    M, N = policy
+
+    Mnem = Mnemonic()
+    await sensitive_data_warning()
+    mnemonic = await choose_bip39_words() # have user input their mnemonic
+    if mnemonic is None: # user canceled wallet restoration
+        return
+    elif Mnem.check(mnemonic) == False:
+        msg = f"""Proof Wallet: Restore Wallet
+
+The 24 BIP39 words you selected do not form a valid mnemonic.
+
+Press [Enter] return to the home menu.
+"""
+        return await ux_show_story(msg, None, '\r')
+
+    msg = f"""Proof Wallet: Restore Wallet
+
+Policy: {M} of {N} (M of N)
+
+24 Word Mnemonic
+{mnemonic}
+
+You can now proceed to this wallet's menu where you'll be able to export its extended \
+public key and finalize it by importing cosigner extended public keys.
+
+Controls
+'x'     -- Abort wallet creation process
+[Enter] -- Save wallet and proceed to this wallet's menu
+"""
+    ch = await ux_show_story(msg, None, ['x', '\r'])
+    if ch == 'x':
+        return
+    w = Wallet(mnemonic, [], M, N, network)
+    w.save()
+    return await wallet_menu(w)
 
 async def create_wallet(network):
     # ask user for desired M and N
