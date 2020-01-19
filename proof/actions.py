@@ -4,6 +4,7 @@ import sys
 import os
 from hashlib import sha256
 from binascii import hexlify
+from decimal import Decimal
 
 from proof.ux import ux_show_story
 from proof.wallet import Wallet, Cosigner
@@ -145,7 +146,6 @@ async def get_computer_entropy():
             return None
         elif ch == '2':
             digits = []
-            hex_chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
             escape_chars = ['u', '\r']
             ch = '*'
             while True:
@@ -160,15 +160,15 @@ You should only have to enter 16 groups of 4 characters, specifically digits \
 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 and letters 'a', 'b', 'c', 'd', 'e', 'f'.
 
 Controls
-[0-9, a-e] -- enter character entropy
+[0-9, a-f] -- enter character entropy
 [Enter]    -- confirm entropy and proceed to next menu
 'u'        -- undo last character
 'x'        -- go back
 
 {entropy_str}
 """
-                ch = await ux_show_story(msg, None, hex_chars + escape_chars)
-                if ch in hex_chars and len(digits) < 64:
+                ch = await ux_show_story(msg, None, HEX_CHARS + escape_chars)
+                if ch in HEX_CHARS and len(digits) < 64:
                     digits.append(ch)
                 elif ch == 'u' and len(digits) > 0:
                     digits.pop()
@@ -338,6 +338,7 @@ async def create_wallet(network):
     msg = f"""Proof Wallet: Create Wallet
 
 Policy: {M} of {N} (M of N)
+
 Dice rolls\n
 {rolls_str}
 
@@ -428,8 +429,35 @@ Controls:
                 continue
             return
         if await import_data_warning(xpub):
-            fp = bip32.fingerprint(xpub)
-            cosigner_xpubs.append((fp, xpub))
+            derived_fingerprint = bip32.fingerprint(xpub)
+            input_fingerprint = ""
+            while True:
+                msg = f"""{title}
+
+If the cosigner you imported is from another Proof Wallet or has \
+no hardened derivation (i.e. it's derivation is "m/"), the cosigner \
+fingerprint will be derived automatically. Otherwise manually enter \
+the {FINGERPRINT_LENGTH} digit fingerprint using the numeric and hex keys.
+
+Controls:
+[Enter]    -- Use derived fingerprint if input buffer is empty else confirm manual input
+[0-9, a-f] -- enter manual digits of fingerprint
+'u'        -- undo last manual digit
+
+Derived fingerprint: {derived_fingerprint}
+Input fingerprint: {input_fingerprint}
+"""
+                ch = await ux_show_story(msg, None, ['\r', 'u'] + HEX_CHARS)
+                if ch == '\r' and input_fingerprint == "":
+                    cosigner_xpubs.append((derived_fingerprint, xpub))
+                    break
+                elif ch == '\r' and len(input_fingerprint) == FINGERPRINT_LENGTH:
+                    cosigner_xpubs.append((input_fingerprint, xpub))
+                    break
+                elif ch in HEX_CHARS and len(input_fingerprint) < FINGERPRINT_LENGTH:
+                    input_fingerprint += ch
+                elif ch == 'u':
+                    input_fingerprint = input_fingerprint[:-1]
 
 async def view_receive_addresses(w):
     title = "Proof Wallet: View Receive Addresses\n\n"
@@ -519,19 +547,23 @@ async def load_wallet(network):
     w = wallets[idx]
     return await wallet_menu(w)
 
-async def display_psbt(w, psbt):
+async def display_psbt(w, psbt, analyze_result):
     tx = psbt[PSBT_TX]
     txid = tx[PSBT_TX_TXID]
     num_vin = len(tx[PSBT_TX_VIN])
     num_vout = len(tx[PSBT_TX_VOUT])
-    fee = psbt[PSBT_FEE]
+
+    fee = Decimal(psbt[PSBT_FEE]).quantize(SATOSHI_PLACES)
+    fee_rate_raw = Decimal(analyze_result[ANALYZE_ESTIMATED_FEERATE]).quantize(SATOSHI_PLACES)
+    fee_rate = round(FEE_RATE_MULTIPLIER * fee_rate_raw, 1) # convert and round BTC/kB to sat/byte
+    vsize = analyze_result[ANALYZE_ESTIMATED_VSIZE]
 
     # Render inputs
     def parse_input(psbt, idx):
         txid = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_TXID]
         vout = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_VOUT]
         addr = psbt[PSBT_INPUTS][idx][PSBT_WITNESS_UTXO][PSBT_SCRIPTPUBKEY][PSBT_ADDRESS]
-        amount = psbt[PSBT_INPUTS][idx][PSBT_WITNESS_UTXO][PSBT_AMOUNT]
+        amount = Decimal(psbt[PSBT_INPUTS][idx][PSBT_WITNESS_UTXO][PSBT_AMOUNT]).quantize(SATOSHI_PLACES)
         return (txid, vout, addr, amount)
     inputs = list(map(lambda i: parse_input(psbt, i), range(num_vin)))
     inputs_str = f"Inputs ({num_vin})\n"
@@ -544,7 +576,7 @@ async def display_psbt(w, psbt):
     def parse_output(psbt, idx):
         change = PSBT_BIP32_DERIVS in psbt[PSBT_OUTPUTS][idx]
         [addr] = psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_SCRIPTPUBKEY][PSBT_TX_ADDRESSES]
-        value = psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_TX_VALUE]
+        value = Decimal(psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_TX_VALUE]).quantize(SATOSHI_PLACES)
         return (addr, value, change)
     outputs = list(map(lambda i: parse_output(psbt, i), range(num_vout)))
     outputs_str = f"Outputs ({num_vout})\n"
@@ -554,7 +586,10 @@ async def display_psbt(w, psbt):
     msg = f"""Proof Wallet: Sign PSBT [View & Sign]
 
 Transaction ID: {txid}
-Transaction Fee: {'%f' % fee}
+Virtual size: {vsize} vbyte
+Fee (total): {fee}
+Fee (rate): {fee_rate} sat/byte
+
 
 {inputs_str}
 {outputs_str}
@@ -637,17 +672,18 @@ Below are the individual PSBT chunks you have imported so far:
     success = len(psbt_validation["error"]) == 0
     success_str = "SUCCESSFUL" if success else "NOT SUCCESSFUL"
     SUCCESS_COLOR = GREEN_COLOR if success else RED_COLOR
-    validation_result = color_text(f"PSBT validation was {success_str}", SUCCESS_COLOR, bg)
+    validation_result = f"PSBT validation was {color_text(success_str, SUCCESS_COLOR, bg)}"
+    summary = ""
     if success:
-        summary = "Successful validations:\n"
+        if len(psbt_validation["warning"]) > 0:
+            summary += "\nWarnings:\n"
+            for warning in psbt_validation["warning"]:
+                summary += f"* {color_text(warning, ORANGE_COLOR, fg)}\n"
+        summary += "\nSuccesses:\n"
         for successful_validation in psbt_validation["success"]:
             summary += f"* {color_text(successful_validation, GREEN_COLOR, fg)}\n"
-        if len(psbt_validation["warning"]) > 0:
-            summary += "\nValidation warnings:\n"
-            for warning in psbt_validation["warning"]:
-                summary += f"* {warning}\n"
     else:
-        summary = "Validation error:\n"
+        summary += "Error:\n"
         summary += f"* {psbt_validation['error'][0]}"
     msg = f"""Proof Wallet: Sign PSBT [Validate]
 
@@ -665,7 +701,8 @@ PSBT you imported for the given wallet {w.name}. Press [Enter] to proceed and \
 
     # display transaction summary and allow user to sign
     psbt = psbt_validation["psbt"]
-    ch = await display_psbt(w, psbt)
+    analyze_result = psbt_validation["analyze_result"]
+    ch = await display_psbt(w, psbt, analyze_result)
     if ch == 'x':
         return
 

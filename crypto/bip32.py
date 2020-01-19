@@ -91,4 +91,4 @@ def bin_hash160(string):
 def fingerprint(xpub):
     vbytes, depth, fingerprint, i, chaincode, key = bip32_deserialize(xpub)
     fp_bytes = bin_hash160(key)[:4]
-    return binascii.hexlify(fp_bytes).decode('ascii').upper()
+    return binascii.hexlify(fp_bytes).decode('ascii')

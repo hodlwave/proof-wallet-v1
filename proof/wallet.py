@@ -125,6 +125,9 @@ class Wallet:
 
     def decodepsbt(self, psbt):
         return self.adapter.bitcoin_cli_json("decodepsbt", psbt)
+
+    def analyzepsbt(self, psbt):
+        return self.adapter.bitcoin_cli_json("analyzepsbt", psbt)
     
     def walletprocesspsbt(self, psbt, importmulti_lo=None, importmulti_hi=None):
         if importmulti_lo is not None and importmulti_hi is not None:

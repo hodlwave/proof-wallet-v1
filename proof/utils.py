@@ -11,10 +11,6 @@ from os import listdir
 from os.path import isfile, join
 from proof.constants import *
 
-YELLOW_COLOR = 191
-GREEN_COLOR = 2
-RED_COLOR = 160
-
 fg = lambda text, color: "\33[38;5;" + str(color) + "m" + text + "\33[0m"
 bg = lambda text, color: "\33[48;5;" + str(color) + "m" + text + "\33[0m"
 
@@ -98,7 +94,7 @@ async def choose_from_list(msg_prefix, options):
             selected = (selected + 1) % len(options)
         elif ch == 'p':
             selected = (selected - 1) % len(options)
-        elif ch == '\r':
+        elif ch == '\r' and len(options) > 0:
             return selected
         elif ch == 'x':
             return None
@@ -121,11 +117,10 @@ Press 'x' to abort this import.
 def wallet_fingerprints(w):
     """
     Returns the set of fingerprints for every signatory
-    of the wallet. Fingerprints are converted to lowercase
-    consistent with Bitcoin Core
+    of the wallet.
     """
-    out = set(map(lambda w: w.fingerprint.lower(), w.cosigners))
-    out.add(w.fingerprint.lower())
+    out = set(map(lambda w: w.fingerprint, w.cosigners))
+    out.add(w.fingerprint)
     return out
 
 def is_valid_xpub(xpub, network):
@@ -152,11 +147,15 @@ def validate_psbt(psbt_raw, w):
         "error": [],
         "psbt": None,
         "importmulti_lo": None,
-        "importmulti_hi": None
+        "importmulti_hi": None,
+        "analyze_result": None
     }
     try:
         # attempt to decode psbt
         psbt = w.decodepsbt(psbt_raw)
+        # attempt to analyze psbt (should always succeed if decode succeeds)
+        response["analyze_result"] = w.analyzepsbt(psbt_raw)
+
         pattern = "^m/([01])/(0|[1-9][0-9]*)$" # match m/{change}/{idx} and prevent leading zeros
         response["success"].append("The provided base64 encoded input is a valid PSBT.")
         # INPUTS VALIDATION
@@ -259,7 +258,7 @@ def validate_psbt(psbt_raw, w):
                 return response
             change_indexes.append(i) # change validations pass
         if len(change_indexes) == 0:
-            response["warning"].append(f"No change outputs were identified in this Tx. If you intended to send change back to your wallet, you should abort this signing process.")
+            response["warning"].append(f"No change outputs were identified in this transaction. If you intended to send bitcoin back to your wallet as change, abort this signing process. If not, you can safely ignore this warning")
         response["success"].append("All output validations succeeded.")
         response["psbt"] = psbt
     except subprocess.CalledProcessError:
