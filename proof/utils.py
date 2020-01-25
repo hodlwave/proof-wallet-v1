@@ -90,9 +90,9 @@ async def choose_from_list(msg_prefix, options):
             prefix = pointer if i == selected else len(pointer) * " "
             msg += prefix + options[i] + "\n"
         ch = await ux_show_story(msg, None, ['n', 'p', '\r', 'x'])
-        if ch == 'n':
+        if ch == 'n' and len(options) > 0:
             selected = (selected + 1) % len(options)
-        elif ch == 'p':
+        elif ch == 'p' and len(options) > 0:
             selected = (selected - 1) % len(options)
         elif ch == '\r' and len(options) > 0:
             return selected
@@ -100,14 +100,22 @@ async def choose_from_list(msg_prefix, options):
             return None
 
 async def import_data_warning(data):
-    msg = f"""Proof Wallet: Import Data Warning
+    desc = f"You have scanned a QR code that represents the following data:\n\n{data}"
+    return await ux_confirm(desc)
 
-You have scanned a QR code that represents the following data:
+async def save_wallet_confirm(w):
+    desc = f"You have chosen to save {w.name} (containing private key data) to the computer's filesystem."
+    return await ux_confirm(desc)
 
-{data}
+async def ux_confirm(desc):
+    msg = f"""Proof Wallet: Confirmation
 
-Press [Enter] to confirm that this is the data you wanted to import. \
-Press 'x' to abort this import.
+{desc}
+
+Are you sure you want to do this?
+
+[Enter] -- Yes
+'x'     -- No
 """
     ch = await ux_show_story(msg, None, ['\r', 'x'])
     if ch == '\r':

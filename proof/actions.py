@@ -14,6 +14,9 @@ from proof.constants import *
 from crypto.mnemonic import Mnemonic
 from crypto import bip32
 
+# In-memory cache of wallets
+WALLETS_GLOBAL = []
+
 async def network_select():
     msg = """\
 Welcome to Proof Wallet,
@@ -39,6 +42,8 @@ async def diagnostic_report(d):
     return await ux_show_story(msg, None, ['\r'])
 
 async def home(network):
+    for w in get_all_wallets():
+        WALLETS_GLOBAL.append(w)
     while True:
         msg = "Proof Wallet: Home\n\n"
         msg += "1) Create wallet\n"
@@ -294,13 +299,13 @@ public key and finalize it by importing cosigner extended public keys.
 
 Controls
 'x'     -- Abort wallet creation process
-[Enter] -- Save wallet and proceed to this wallet's menu
+[Enter] -- Go to wallet menu
 """
     ch = await ux_show_story(msg, None, ['x', '\r'])
     if ch == 'x':
         return
     w = Wallet(mnemonic, [], M, N, network)
-    w.save()
+    WALLETS_GLOBAL.append(w)
     return await wallet_menu(w)
 
 async def create_wallet(network):
@@ -322,7 +327,7 @@ async def create_wallet(network):
     dice_entropy = sha256(bytes(rolls)).digest()
     # xor dice & computer entropy to generate wallet xprv
     combined_entropy = bytes([a ^ b for a, b in zip(computer_entropy, dice_entropy)])
-    # save wallet, export xpub via QR
+    # generate mnemonic from entropy
     Mnem = Mnemonic()
     mnemonic = Mnem.to_mnemonic(combined_entropy)
     seed = Mnem.to_seed(mnemonic)
@@ -360,13 +365,13 @@ keys.
 
 Controls
 'x'     -- Abort wallet creation process
-[Enter] -- Save wallet and proceed to this wallet's menu
+[Enter] -- Go to wallet menu
 """
     ch = await ux_show_story(msg, None, ['x', '\r'])
     if ch == 'x':
         return
     w = Wallet(mnemonic, [], M, N, network)
-    w.save()
+    WALLETS_GLOBAL.append(w)
     return await wallet_menu(w)
 
 async def finalize_wallet(w):
@@ -385,7 +390,6 @@ async def finalize_wallet(w):
             # regenerate wallet with xpubs
             cosigners = list(map(lambda x: Cosigner(x[0], x[1]), cosigner_xpubs))
             w_updated = Wallet(w.mnemonic, cosigners, w.m, w.n, w.network)
-            w_updated.save()
             msg = f"""{title}
 
 {w.name} has now been finalized with the following cosigners:
@@ -394,9 +398,11 @@ async def finalize_wallet(w):
 
 You can now use this wallet to receive bitcoin and sign PSBTs.
 
-Press [Enter] to return to the home menu.
+Press [Enter] to go to the wallet menu.
 """
-            return await ux_show_story(msg, None, ['\r'])
+            await ux_show_story(msg, None, ['\r'])
+            return await wallet_menu(w)
+
         # wallet is not yet complete
         msg = f"""{title}
 
@@ -497,7 +503,7 @@ async def wallet_menu(w):
 Wallet Name: {w.name}
 Policy: {w.m} of {w.n}
 Network: {w.network}
-Highest hardened derivation path: {"'m/'"}
+Highest hardened derivation path: {"'m'"}
 
 """
     while True:
@@ -507,15 +513,19 @@ What would you like to do?
 1) Export xpub
 2) View receive addresses
 3) Sign PSBT
-4) Go back
+4) Save Wallet
+5) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
+            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
                 await view_receive_addresses(w)
             elif ch == '3':
                 await sign_psbt(w)
+            elif ch == '4':
+                if await save_wallet_confirm(w):
+                    w.save()
             else:
                 return
         else:
@@ -523,15 +533,19 @@ What would you like to do?
 What would you like to do?
 1) Export xpub
 2) Add cosigners to finalize wallet
-3) Go back
+3) Save Wallet
+4) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3'])
+            ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
                 await finalize_wallet(w)
                 # reload wallet in case it has been finalized
                 w = Wallet.load(w.name)
+            elif ch == '3':
+                if await save_wallet_confirm(w):
+                    w.save()
             else:
                 return
 
@@ -539,7 +553,7 @@ async def load_wallet(network):
     title = "Proof Wallet: Load Wallet"
     # choose wallet to finalize
     msg_prefix = f"{title}\n\nChoose a {network} wallet to load"
-    wallets = list(filter(lambda w: w.network == network, get_all_wallets()))
+    wallets = list(filter(lambda w: w.network == network, WALLETS_GLOBAL))
     wallet_names = list(map(lambda w: w.name + " " + ("[FINALIZED]" if is_complete(w) else "[NOT FINALIZED]"), wallets))
     idx = await choose_from_list(msg_prefix, wallet_names)
     if idx == None: # user wants to go back
