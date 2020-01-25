@@ -50,6 +50,14 @@ def pprint_entropy(data):
         out += "" if i == len(data) // 4 - 1 else " "
     return out
 
+def display_mnemonic(mnemonic):
+    words = mnemonic.split(" ")
+    result = ""
+    for i, word in enumerate(words):
+        curlen = len(word)
+        result += f"{' ' if i < 9 else ''}{str(i+1)}. {word}\n"
+    return result
+
 def generate_qr(data):
     # create temp files
     tmp1 = NamedTemporaryFile()

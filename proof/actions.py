@@ -351,8 +351,8 @@ Dice rolls\n
 Computer entropy
 {pprint_entropy(computer_entropy)}
 
-24 Word Mnemonic
-{mnemonic}
+Mnemonic
+{display_mnemonic(mnemonic)}
 
 If this is the first computer in the Proof Wallet protocol, you should \
 enter the above dice rolls and computer-generated entropy into the second machine \
@@ -405,7 +405,7 @@ Press [Enter] to go to the wallet menu.
             # update the wallet in WALLETS_GLOBAL
             idx = list(map(lambda w: w.name, WALLETS_GLOBAL)).index(w.name)
             WALLETS_GLOBAL[idx] = w_updated
-            return await wallet_menu(w_updated)
+            return w_updated
 
         # wallet is not yet complete
         msg = f"""{title}
@@ -421,7 +421,7 @@ Controls:
 """
         ch = await ux_show_story(msg, None, ['\r', 'x'])
         if ch == 'x':
-            return
+            return w
         xpub = await scan_qr()
         if not is_valid_xpub(xpub, w.network):
             msg = f"""{title}
@@ -501,10 +501,23 @@ async def view_receive_addresses(w):
         elif ch == 'x':
             return
 
+async def show_mnemonic(w):
+    desc = f"You have chosen to view your mnemonic phrase containing sensitive private key data."
+    if await ux_confirm(desc):
+        msg = f"""Proof Wallet: Show mnemonic
+
+{display_mnemonic(w.mnemonic)}
+
+Controls
+[Enter] -- Go back to wallet menu
+"""
+        return await ux_show_story(msg, None, ['\r'])
+
 async def wallet_menu(w):
     header = f"""Proof Wallet: Wallet Menu
 
 Wallet Name: {w.name}
+Fingerprint: {w.fingerprint}
 Policy: {w.m} of {w.n}
 Network: {w.network}
 Highest hardened derivation path: {"'m'"}
@@ -512,15 +525,22 @@ Highest hardened derivation path: {"'m'"}
 """
     while True:
         if is_complete(w):
+            cosigner_info = ""
+            for cosigner in w.cosigners:
+                cosigner_info += f"{cosigner.fingerprint}    | {cosigner.xpub}\n"
             msg = f"""{header}\
+Cosigners:
+fingerprint | extended public key
+{cosigner_info}
 What would you like to do?
 1) Export xpub
 2) View receive addresses
 3) Sign PSBT
-4) Save Wallet
-5) Go back
+4) Show mnemonic
+5) Save Wallet
+6) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5'])
+            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5', '6'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
@@ -528,6 +548,8 @@ What would you like to do?
             elif ch == '3':
                 await sign_psbt(w)
             elif ch == '4':
+                await show_mnemonic(w)
+            elif ch == '5':
                 if await save_wallet_confirm(w):
                     w.save()
             else:
@@ -537,15 +559,18 @@ What would you like to do?
 What would you like to do?
 1) Export xpub
 2) Add cosigners to finalize wallet
-3) Save Wallet
-4) Go back
+3) Show mnemonic
+4) Save Wallet
+5) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
+            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
-                return await finalize_wallet(w)
+                w = await finalize_wallet(w)
             elif ch == '3':
+                await show_mnemonic(w)
+            elif ch == '4':
                 if await save_wallet_confirm(w):
                     w.save()
             else:
