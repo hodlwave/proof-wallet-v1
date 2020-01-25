@@ -441,7 +441,7 @@ Controls:
                 msg = f"""{title}
 
 If the cosigner you imported is from another Proof Wallet or has \
-no hardened derivation (i.e. it's derivation is "m/"), the cosigner \
+no hardened derivation (i.e. it's derivation is 'm'), the cosigner \
 fingerprint will be derived automatically. Otherwise manually enter \
 the {FINGERPRINT_LENGTH} digit fingerprint using the numeric and hex keys.
 

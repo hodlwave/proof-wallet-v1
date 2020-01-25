@@ -9,77 +9,51 @@ TESTNET_PUBLIC = b'\x04\x35\x87\xCF'
 PRIVATE = [MAINNET_PRIVATE, TESTNET_PRIVATE]
 PUBLIC = [MAINNET_PUBLIC, TESTNET_PUBLIC]
 
-code_strings = {
-    58: '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',
-    256: ''.join([chr(x) for x in range(256)])
-}
+B58_DIGITS = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
-def encode(val, base, minlen=0):
+class Base58Error(Exception):
+    pass
+
+class InvalidBase58Error(Base58Error):
+    """Raised on generic invalid base58 data, such as bad characters.
+
+    Checksum failures raise Base58ChecksumError specifically.
     """
-    Encodes an integer as bytestring if base = 256 or else
-    a string in the given base. Adds padding bytes as
-    necessary to enforce a minimum length.
-    """
-    base, minlen = int(base), int(minlen)
-    code_string = code_strings[base]
-    result_bytes = bytes()
-    while val > 0:
-        curcode = code_string[val % base]
-        result_bytes = bytes([ord(curcode)]) + result_bytes
-        val //= base
+    pass
 
-    pad_size = minlen - len(result_bytes)
+def decode(s):
+    """Decode a base58-encoding string, returning bytes"""
+    if not s:
+        return b''
 
-    padding_element = b'\x00' if base == 256 \
-        else b'1' if base == 58 \
-        else b'0'
-    if (pad_size > 0):
-        result_bytes = padding_element*pad_size + result_bytes
+    # Convert the string to an integer
+    n = 0
+    for c in s:
+        n *= 58
+        if c not in B58_DIGITS:
+            raise InvalidBase58Error('Character %r is not a valid base58 character' % c)
+        digit = B58_DIGITS.index(c)
+        n += digit
 
-    result_string = ''.join([chr(y) for y in result_bytes])
-    result = result_bytes if base == 256 else result_string
+    # Convert the integer to bytes
+    h = '%x' % n
+    if len(h) % 2:
+        h = '0' + h
+    res = binascii.unhexlify(h.encode('utf8'))
 
-    return result
-
-def decode(string, base):
-    """
-    Decodes a string in the given base to an integer
-    """
-    base = int(base)
-    code_string = code_strings[base]
-    result = 0
-
-    def extract(d, cs):
-        """
-        Finds the index of the provided character in
-        its code_string ("alphabet")
-        """
-        return cs.find(d if isinstance(d, str) else chr(d))
-
-    while len(string) > 0:
-        result *= base
-        result += extract(string[0], code_string)
-        string = string[1:]
-    return result
-
-def from_string_to_bytes(a):
-    return a if isinstance(a, bytes) else bytes(a, 'utf-8')
-
-def bin_dbl_sha256(s):
-    bytes_to_hash = from_string_to_bytes(s)
-    return hashlib.sha256(hashlib.sha256(bytes_to_hash).digest()).digest()
-
-def changebase(string, frm, to, minlen=0):
-    return encode(decode(string, frm), to, minlen)
+    # Add padding back.
+    pad = 0
+    for c in s[:-1]:
+        if c == B58_DIGITS[0]: pad += 1
+        else: break
+    return b'\x00' * pad + res
 
 def bip32_deserialize(data):
-    dbin = changebase(data, 58, 256)
-    if bin_dbl_sha256(dbin[:-4])[:4] != dbin[-4:]:
-        raise Exception("Invalid checksum")
+    dbin = decode(data)
     vbytes = dbin[0:4]
     depth = dbin[4]
     fingerprint = dbin[5:9]
-    i = decode(dbin[9:13], 256)
+    i = dbin[9:13]
     chaincode = dbin[13:45]
     key = dbin[46:78] + b'\x01' if vbytes in PRIVATE else dbin[45:78]
     return (vbytes, depth, fingerprint, i, chaincode, key)
