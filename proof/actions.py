@@ -401,7 +401,10 @@ You can now use this wallet to receive bitcoin and sign PSBTs.
 Press [Enter] to go to the wallet menu.
 """
             await ux_show_story(msg, None, ['\r'])
-            return await wallet_menu(w)
+            # update the wallet in WALLETS_GLOBAL
+            idx = list(map(lambda w: w.name, WALLETS_GLOBAL)).index(w.name)
+            WALLETS_GLOBAL[idx] = w_updated
+            return await wallet_menu(w_updated)
 
         # wallet is not yet complete
         msg = f"""{title}
@@ -540,9 +543,7 @@ What would you like to do?
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
-                await finalize_wallet(w)
-                # reload wallet in case it has been finalized
-                w = Wallet.load(w.name)
+                return await finalize_wallet(w)
             elif ch == '3':
                 if await save_wallet_confirm(w):
                     w.save()
