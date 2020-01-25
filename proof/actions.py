@@ -93,40 +93,34 @@ async def roll_dice():
     Interaction for generating >= 256 bits of entropy
     with casino dice
     """
-    N = 100 # minimum rolls needed
+    MINIMUM_ROLLS_REQUIRED = 100
     rolls = []
-    while True:
-        # Draw previous rows
-        finished_chunks = (len(rolls) // 10)
-        roll_str = ""
-        for i in range(finished_chunks):
-            start, end = 10 * i, 10 * i + 10
-            roll_str += f"Rolls {start + 1} through {end}\n"
-            roll_str += format_rolls(rolls[start:end]) + "\n\n"
 
-        # Draw last row
-        remaining = rolls[finished_chunks * 10:]
-        roll_str += f"Rolls {finished_chunks * 10 + 1} through {finished_chunks * 10 + 10}\n"
-        roll_str += "" if len(remaining) == 0 else format_rolls(remaining)
+    while True:
+        ROLLS_ROWS = len(rolls) // ROLLS_PER_ROW
+        rolls_str = ""
+        for i in range(ROLLS_ROWS + 1):
+            rolls_str += format_rolls_row(rolls, i, ROLLS_NUM_COLS, ROLLS_PER_ROW, ROLLS_PER_COL)
+
         msg = f"""Proof Wallet: Dice Entropy
 
-Create entropy by rolling a casino grade dice at least {N} times.
+Create entropy by rolling a casino grade dice at least {MINIMUM_ROLLS_REQUIRED} times.
 
 Controls:
 [1, 2, 3, 4, 5, 6] -- roll dice
 'u'                -- undo last dice roll
 'x'                -- exit wallet creation
-[Enter]            -- finish dice rolls and proceed (only after {N} rolls)
+[Enter]            -- finish dice rolls and proceed (only after {MINIMUM_ROLLS_REQUIRED} rolls)
 
-{roll_str}
+{rolls_str}
 """
         ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5', '6', '\r', 'x', 'u'])
         if ch in ['1', '2', '3', '4', '5', '6']:
             rolls.append(ch)
-        elif ch == '\r' and len(rolls) < N:
+        elif ch == '\r' and len(rolls) < MINIMUM_ROLLS_REQUIRED:
             continue
-        elif ch == '\r' and len(rolls) >= N:
-            return list(map(int, rolls))
+        elif ch == '\r' and len(rolls) >= MINIMUM_ROLLS_REQUIRED:
+            return rolls
         elif ch == 'u' and len(rolls) > 0:
             rolls.pop()
         elif ch == 'x':
@@ -247,12 +241,19 @@ Choose word #{len(mnemonic) + 1}:
 
 async def export_xpub(xpub):
     while True:
-        msg = "The following QR code encodes your wallet's root xpub. "
-        msg += "Scan it with your phone and transfer it to your online watch-only-wallet.\n\n"
-        msg += "If the QR code appears broken, try maximizing your terminal window, zooming out and pressing [ENTER]. "
-        msg += "When you've finished scanning the QR code, press 'x' to go back to the last menu.\n\n"
-        msg += xpub + "\n\n"
-        msg += generate_qr(xpub)
+        msg = f"""Proof Wallet: Export xpub
+
+The QR below is your master public key. Scan and transfer it to your \
+watch-only-wallet as well as any other cosigner's in your multisignature \
+quorum.
+
+Controls
+[Enter] -- Reload this window (zoom out and press this if the QR code looks broken
+'x'     -- Go back to the wallet menu
+
+Displayed data: {xpub}\n\n
+{generate_qr(xpub)}
+"""
         ch = await ux_show_story(msg, None, ["\r", "x"])
         if ch == 'x':
             return
@@ -319,12 +320,13 @@ async def create_wallet(network):
     rolls = await roll_dice()
     if rolls is None:
         return
+    rolls_ints = list(map(int, rolls))
 
     computer_entropy = await get_computer_entropy()
     if computer_entropy is None:
         return
     # get additional entropy from os
-    dice_entropy = sha256(bytes(rolls)).digest()
+    dice_entropy = sha256(bytes(rolls_ints)).digest()
     # xor dice & computer entropy to generate wallet xprv
     combined_entropy = bytes([a ^ b for a, b in zip(computer_entropy, dice_entropy)])
     # generate mnemonic from entropy
@@ -335,18 +337,17 @@ async def create_wallet(network):
 
     await sensitive_data_warning()
 
+    ROLLS_ROWS = len(rolls) // ROLLS_PER_ROW
     rolls_str = ""
-    for i in range(len(rolls) // 10 + 1):
-        rolls_str += f"Rolls {10*i + 1} to {10*i + 10}: "
-        rolls_str += format_rolls(map(str, rolls[10*i : 10*i + 10]))
-        rolls_str += "\n"
+    for i in range(ROLLS_ROWS + 1):
+        rolls_str += format_rolls_row(rolls, i, ROLLS_NUM_COLS, ROLLS_PER_ROW, ROLLS_PER_COL)
+
     msg = f"""Proof Wallet: Create Wallet
 
 Policy: {M} of {N} (M of N)
 
 Dice rolls\n
 {rolls_str}
-
 Computer entropy
 {pprint_entropy(computer_entropy)}
 

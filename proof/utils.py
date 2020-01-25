@@ -20,6 +20,26 @@ def color_text(text, color, formatter):
 def format_rolls(arr):
     return " ".join(arr)
 
+def format_rolls_row(rolls, row, ROLLS_NUM_COLS, ROLLS_PER_ROW, ROLLS_PER_COL):
+    """
+    Render dice rolls row based on grid dimensions
+    """
+    result = ""
+    for col in range(ROLLS_NUM_COLS): # render each column's header
+        start = ROLLS_PER_ROW * row + ROLLS_PER_COL * col
+        end = start + ROLLS_PER_COL
+        result += f"Rolls {start + 1} through {end}\t"
+
+    result += "\n" # newline
+
+    for col in range(ROLLS_NUM_COLS): # render each column's rolls
+        start = ROLLS_PER_ROW * row + ROLLS_PER_COL * col
+        end = start + ROLLS_PER_COL
+        result += format_rolls(rolls[start:end]) + "\t"
+
+    result += "\n\n" # two newlines for legibility
+    return result
+
 def pprint_entropy(data):
     """
     Transforms raw bytes into a more human-readable form

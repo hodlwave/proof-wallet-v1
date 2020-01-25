@@ -91,13 +91,7 @@ async def ux_show_story(msg, title=None, escape=None):
         if escape and (ch == escape or ch in escape):
             # allow another way out for some usages
             return ch
-        elif ch == '0':
-            top = 0
-        elif ch == 'U':     # page up
-            top = max(0, top-H)
-        elif ch == 'D':     # page dn
-            top = min(len(lines)-2, top+H)
-        elif ch == 'u':     # scroll up
+        elif ch == 'U':     # scroll up
             top = max(0, top-1)
-        elif ch == 'd':     # scroll dn
+        elif ch == 'D':     # scroll dn
             top = min(len(lines)-2, top+1)
