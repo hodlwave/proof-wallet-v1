@@ -15,26 +15,35 @@ fg = lambda text, color: "\33[38;5;" + str(color) + "m" + text + "\33[0m"
 bg = lambda text, color: "\33[48;5;" + str(color) + "m" + text + "\33[0m"
 
 def color_text(text, color, formatter):
+    """Utility to color text displayed in terminal."""
     return formatter(text, color)
 
 def format_rolls(arr):
+    """Formats a list of dice rolls."""
     return " ".join(arr)
 
-def format_rolls_row(rolls, row, ROLLS_NUM_COLS, ROLLS_PER_ROW, ROLLS_PER_COL):
+def format_rolls_row(rolls, row, num_cols, rolls_per_row, rolls_per_col):
     """
-    Render dice rolls row based on grid dimensions
+    Render dice rolls row based on grid dimensions.
+
+    Parameters:
+        rolls   (list[str]): dice rolls
+        row           (int): row in rolls to format
+        num_cols      (int): number of columns in row
+        rolls_per_row (int): number of dice rolls per row
+        rolls_per_col (int): number of dice rolls per column
     """
     result = ""
-    for col in range(ROLLS_NUM_COLS): # render each column's header
-        start = ROLLS_PER_ROW * row + ROLLS_PER_COL * col
-        end = start + ROLLS_PER_COL
+    for col in range(num_cols): # render each column's header
+        start = rolls_per_row * row + rolls_per_col * col
+        end = start + rolls_per_col
         result += f"Rolls {start + 1} through {end}\t"
 
     result += "\n" # newline
 
-    for col in range(ROLLS_NUM_COLS): # render each column's rolls
-        start = ROLLS_PER_ROW * row + ROLLS_PER_COL * col
-        end = start + ROLLS_PER_COL
+    for col in range(num_cols): # render each column's rolls
+        start = rolls_per_row * row + rolls_per_col * col
+        end = start + rolls_per_col
         result += format_rolls(rolls[start:end]) + "\t"
 
     result += "\n\n" # two newlines for legibility
@@ -42,7 +51,10 @@ def format_rolls_row(rolls, row, ROLLS_NUM_COLS, ROLLS_PER_ROW, ROLLS_PER_COL):
 
 def pprint_entropy(data):
     """
-    Transforms raw bytes into a more human-readable form
+    Transforms raw bytes into a more human-readable form (groups of four hex chars).
+
+    Parameters:
+        data [bytes]: bytes to pretty print
     """
     out = ""
     for i in range(len(data) // 4):
@@ -51,6 +63,12 @@ def pprint_entropy(data):
     return out
 
 def display_mnemonic(mnemonic):
+    """
+    Formats a BIP39 mnemonic.
+
+    Parameters:
+        mnemonic (str): space separated string
+    """
     words = mnemonic.split(" ")
     result = ""
     for i, word in enumerate(words):
@@ -59,6 +77,8 @@ def display_mnemonic(mnemonic):
     return result
 
 def generate_qr(data):
+    """Generates an ANSI encoded QR code from string data"""
+
     # create temp files
     tmp1 = NamedTemporaryFile()
     tmp2 = NamedTemporaryFile()
@@ -78,7 +98,9 @@ def generate_qr(data):
 async def scan_qr():
     """
     Async utility for scanning a qr code using zbarcam.
-    Returns the scanned data as a string
+
+    Returns:
+        scanned data as string
     """
     cmd = ["zbarcam", "--raw", "--nodisplay"]
     popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
@@ -88,21 +110,29 @@ async def scan_qr():
         return stdout_line.rstrip('\n')
 
 def is_complete(w):
+    """
+    Utility to determine whether a wallet is complete.
+
+    A complete wallet defines a policy, mnemonic, and knows all of its 
+    cosigner xpubs.
+    """
     return len(w.cosigners) + 1 == w.n
 
 def get_all_wallets():
+    """Fetches all Wallets persisted to the filesystem"""
     path = Wallet.get_dir()
     wallet_files = [f for f in listdir(path) if isfile(join(path, f))]
     return list(map(lambda f: Wallet.load(f), wallet_files))
 
 async def choose_from_list(msg_prefix, options):
     """
-    Async utility that lets you choose from a list of items passed
-    in. The list is rendered with an arrow pointing to the currently
-    selected item, and the user presses confirm to make his selection.
-    The msg_prefix is informational text rendered above the item list.
+    Async utility for choosing an item from a list.
 
-    Returns the numeric index selected.
+    Parameters:
+        msg_prefix       (str): informational text
+        options    (list[str]): options to choose from
+    Returns:
+        index selected or None if user cancels menu
     """
     selected = 0
     pointer = " --> "
@@ -128,15 +158,43 @@ async def choose_from_list(msg_prefix, options):
             return None
 
 async def import_data_warning(data):
+    """
+    Import data warning.
+
+    Lets users validate that  scanned data is as expected.
+    """
     desc = f"You have scanned a QR code that represents the following data:\n\n{data}"
     return await ux_confirm(desc)
 
 async def save_wallet_confirm(w):
+    """Confirmation shown to user before saving wallet to filesystem."""
     desc = f"You have chosen to save {w.name} (containing private key data) to the computer's filesystem."
     return await ux_confirm(desc)
 
-async def ux_confirm(desc):
-    msg = f"""Proof Wallet: Confirmation
+async def sensitive_data_warning():
+    """Warning screen that appears before private key data is displayed on screen"""
+    desc = f"""\
+If you continue to the next page, it will display sensitive private key data \
+that could be used by an adversary to spend your bitcoin.
+
+Perform all of the following security steps to minimize the chance that your \
+private key data is leaked over any side-channel:
+* TODO: Copy Glacier Protocol Setup Protocol steps (Section VI)"""
+    title = "Sensitive Data Warning"
+    return await ux_confirm(desc, title)
+
+async def ux_confirm(desc, title=None):
+    """
+    General utility that lets a user confirm a given action.
+
+    Parameters:
+        desc  (str): confirmation description
+        title (str): optional title for confirmation
+
+    Returns:
+        True if user confirms action, otherwise False
+    """
+    msg = f"""Proof Wallet: {"Confirmation" if title is None else title}
 
 {desc}
 
@@ -151,15 +209,22 @@ Are you sure you want to do this?
     return False
 
 def wallet_fingerprints(w):
-    """
-    Returns the set of fingerprints for every signatory
-    of the wallet.
-    """
+    """Set of fingerprints for every signer in wallet"""
     out = set(map(lambda w: w.fingerprint, w.cosigners))
     out.add(w.fingerprint)
     return out
 
 def is_valid_xpub(xpub, network):
+    """
+    Utility that checks if a string is a valid BIP32 extended public key
+
+    Parameters:
+        xpub    (str): potential xpub
+        network (str): bitcoin network
+
+    Returns:
+        boolean
+    """
     adapter = BitcoindAdapter(network)
     desc = f"pk({xpub})"
     try:
@@ -177,9 +242,19 @@ def validate_psbt(psbt_raw, w):
     Validates that the psbt is safe to sign based on an exhaustive list
     of invariants for the provided wallet.
 
-    Keyword arguments:
-    psbt_raw -- the base64 encoded psbt string
-    w        -- the prospective signing Wallet
+    Parameters:
+        psbt_raw    (str): base64 encoded psbt
+        w        (Wallet): prospective signing wallet
+
+    Returns:
+        dict with the following key-value pairs
+           'success'   (list[str]): successful validations performed on psbt
+           'warning'   (list[str]): warnings in psbt to inform user about
+           'error'     (list[str]): errors in psbt which prevent it from being signable
+           'psbt'           (dict): python dict loaded from `bitcoin-cli decodepsbt` RPC call
+           'importmulti_lo'  (int): lower bound to send to `bitcoin-cli importmulti` RPC call
+           'importmulti_hi'  (int): upper bound to send to `bitcoin-cli importmulti` RPC call
+           'analyze_result' (dict): python dict loaded from `bitcoin-cli analyzepsbt` RPC call
     """
     response = {
         "success": [],

@@ -18,6 +18,7 @@ from crypto import bip32
 WALLETS_GLOBAL = []
 
 async def network_select():
+    """Select the Bitcoin network to use for the given session."""
     msg = """\
 Welcome to Proof Wallet,
 the dedicated PSBT multisig UI for Bitcoin Core.
@@ -30,10 +31,7 @@ Choose a network:
     return await ux_show_story(msg, None, ['1','2','3','q'])
 
 async def diagnostic_report(d):
-    """
-    Diplays a diagnostic report showing whether
-    all of the software dependencies are installed
-    """
+    """Diagnostic report showing whether Proof Wallet dependencies are on the path"""
     msg = "Diagnostic Report\n\n"
     msg += "All of the following programs must be installed (✔) on your computer before you can use Proof Wallet.\n\n"
     for k, v in d.items():
@@ -42,6 +40,7 @@ async def diagnostic_report(d):
     return await ux_show_story(msg, None, ['\r'])
 
 async def home(network):
+    """Proof Wallet home menu"""
     for w in get_all_wallets():
         WALLETS_GLOBAL.append(w)
     while True:
@@ -61,9 +60,7 @@ async def home(network):
             sys.exit(0)
 
 async def choose_policy():
-    """
-    Interaction for getting M and N from user
-    """
+    """Interaction for getting M and N from user"""
     title = "Proof Wallet: Choose multisig policy"
     msg_prefix = f"""{title}
 
@@ -89,10 +86,7 @@ How many signatures (M) should be required to spend bitcoins from this wallet?\
     return M, N
 
 async def roll_dice():
-    """
-    Interaction for generating >= 256 bits of entropy
-    with casino dice
-    """
+    """Interaction for generating >= 256 bits of entropy with casino dice"""
     MINIMUM_ROLLS_REQUIRED = 100
     rolls = []
 
@@ -128,8 +122,11 @@ Controls:
 
 async def get_computer_entropy():
     """
-    Interaction for getting entropy from the computer,
-    either directly or manually entering (if on Machine #2)
+    Interaction for getting entropy from the computer.
+
+    The user can get entropy from the computer (Machine #1) or
+    directly enter the entropy generated on Machine #1 to verify
+    the validity of the operations on Machine #2.
     """
     title = "Proof Wallet: Computer Entropy\n\n"
     while True:
@@ -177,6 +174,8 @@ Controls
                     continue
 
 async def choose_bip39_words():
+    """Interaction for selecting a BIP39 mnemonic phrase."""
+
     # build Trie of bip39 wordlist
     curdir = os.path.dirname(__file__)
     f =  open(f"{curdir}/../crypto/english.txt", "r", encoding="utf-8")
@@ -240,6 +239,12 @@ Choose word #{len(mnemonic) + 1}:
     return " ".join(mnemonic)
 
 async def export_xpub(xpub):
+    """
+    Interaction for exporting xpub via QR code.
+
+    Parameters:
+        xpub (str): The wallet xpub
+    """
     while True:
         msg = f"""Proof Wallet: Export xpub
 
@@ -258,16 +263,9 @@ Displayed data: {xpub}\n\n
         if ch == 'x':
             return
 
-async def sensitive_data_warning():
-    msg = "Proof Wallet: Sensitive Info Warning\n\n"
-    msg += "The following screen displays sensitive private key data that could be used by an attaker to "
-    msg += "steal your bitcoin.\n\nPerform all of the following security steps to minimize "
-    msg += "the chance that your private key data is leaked over any side-channel:\n"
-    msg += "* TODO: Copy Glacier Protocol Setup Protocol steps (Section VI)"
-    msg += "\n\nPress [Enter] once you are ready to proceed"
-    await ux_show_story(msg, None, ["\r"])
-
 async def restore_wallet(network):
+    """Restore a wallet from a saved BIP39 phrase."""
+
     # ask user for desired M and N
     policy = await choose_policy()
     if policy is None: # user canceled selection
@@ -275,7 +273,9 @@ async def restore_wallet(network):
     M, N = policy
 
     Mnem = Mnemonic()
-    await sensitive_data_warning()
+    # Warn user about private key data on-screen
+    if not await sensitive_data_warning():
+        return
     mnemonic = await choose_bip39_words() # have user input their mnemonic
     if mnemonic is None: # user canceled wallet restoration
         return
@@ -310,11 +310,17 @@ Controls
     return await wallet_menu(w)
 
 async def create_wallet(network):
+    """Create a new wallet with user-supplied entropy."""
+
     # ask user for desired M and N
     policy = await choose_policy()
     if policy is None: # user canceled selection
         return
     M, N = policy
+
+    # Warn user about private key data on-screen
+    if not await sensitive_data_warning():
+        return
 
     # roll dice > N times
     rolls = await roll_dice()
@@ -334,8 +340,6 @@ async def create_wallet(network):
     mnemonic = Mnem.to_mnemonic(combined_entropy)
     seed = Mnem.to_seed(mnemonic)
     xprv = Mnem.to_hd_master_key(seed, network)
-
-    await sensitive_data_warning()
 
     ROLLS_ROWS = len(rolls) // ROLLS_PER_ROW
     rolls_str = ""
@@ -376,6 +380,8 @@ Controls
     return await wallet_menu(w)
 
 async def finalize_wallet(w):
+    """Finalize a multisig wallet by adding cosigner xpubs/fingerprints."""
+
     title = "Proof Wallet: Finalize Wallet"
     # import N xpubs flow
     cosigner_xpubs = []
@@ -470,6 +476,7 @@ Input fingerprint: {input_fingerprint}
                     input_fingerprint = input_fingerprint[:-1]
 
 async def view_receive_addresses(w):
+    """Show receive addresses for a given wallet."""
     title = "Proof Wallet: View Receive Addresses"
     start = 0
     N = 10
@@ -509,18 +516,24 @@ Controls
             return
 
 async def show_mnemonic(w):
+    """Display BIP39 mnemonic phrase for wallet."""
+
+    # Warn user about private key data onscreen
+    if not await sensitive_data_warning():
+        return
+
     desc = f"You have chosen to view your mnemonic phrase containing sensitive private key data."
-    if await ux_confirm(desc):
-        msg = f"""Proof Wallet: Show mnemonic
+    msg = f"""Proof Wallet: Show mnemonic
 
 {display_mnemonic(w.mnemonic)}
 
 Controls
 [Enter] -- Go back to wallet menu
 """
-        return await ux_show_story(msg, None, ['\r'])
+    return await ux_show_story(msg, None, ['\r'])
 
 async def wallet_menu(w):
+    """Wallet home menu."""
     header = f"""Proof Wallet: Wallet Menu
 
 Wallet Name: {w.name}
@@ -584,6 +597,7 @@ What would you like to do?
                 return
 
 async def load_wallet(network):
+    """Load a wallet from the cache for the given network."""
     title = "Proof Wallet: Load Wallet"
     # choose wallet to finalize
     msg_prefix = f"{title}\n\nChoose a {network} wallet to load"
@@ -596,6 +610,18 @@ async def load_wallet(network):
     return await wallet_menu(w)
 
 async def display_psbt(w, psbt, analyze_result):
+    """
+    Display a PSBT in user-friendly format and ask user to sign.
+
+    Parameters:
+        w            (Wallet): wallet that can sign the given PSBT
+        psbt           (dict): python dict loaded from bitcoin-cli decodepsbt RPC call
+        analyze_result (dict): python dict loaded from bitcoin-cli analyzepsbt RPC call
+
+    Returns:
+        '\r': confirmation that user intends to sign psbt
+        'x' : user cancels menu / rejects signing psbt
+    """
     tx = psbt[PSBT_TX]
     txid = tx[PSBT_TX_TXID]
     num_vin = len(tx[PSBT_TX_VIN])
@@ -606,7 +632,7 @@ async def display_psbt(w, psbt, analyze_result):
     fee_rate = round(FEE_RATE_MULTIPLIER * fee_rate_raw, 1) # convert and round BTC/kB to sat/byte
     vsize = analyze_result[ANALYZE_ESTIMATED_VSIZE]
 
-    # Render inputs
+    # Render transaction inputs
     def parse_input(psbt, idx):
         txid = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_TXID]
         vout = psbt[PSBT_TX][PSBT_TX_VIN][idx][PSBT_TX_VOUT]
@@ -620,7 +646,7 @@ async def display_psbt(w, psbt, analyze_result):
         addr_colored = color_text(addr, GREEN_COLOR, fg)
         inputs_str += f"{txid_formatted}:{vout}\t{addr_colored}\t{amount}\n"
 
-    # Render outputs
+    # Render transaction outputs
     def parse_output(psbt, idx):
         change = PSBT_BIP32_DERIVS in psbt[PSBT_OUTPUTS][idx]
         [addr] = psbt[PSBT_TX][PSBT_TX_VOUT][idx][PSBT_SCRIPTPUBKEY][PSBT_TX_ADDRESSES]
@@ -648,6 +674,8 @@ Press 'x' to abort the signing process and return to the Wallet Menu.
     return await ux_show_story(msg, None, ["\r", 'x'])
 
 async def export_psbt(psbt):
+    """Exports a base64 encoded psbt in a batch of QR codes."""
+
     CHUNK_SIZE = 200 # don't display a QR code larger than CHUNK_SIZE bytes
     chunked = [
         # get chunk of bytes, convert to base64 bytes and decode to string
@@ -680,6 +708,17 @@ Controls:
             return
 
 async def sign_psbt(w):
+    """
+    Interaction for wallet to sign psbt.
+
+    Includes import psbt in a batch of QR codes, performing automated
+    validations on the imported data, displaying a summarized view of
+    the transaction for the user to evaluate / sign.
+
+    Parameters:
+        w (Wallet): the wallet that would perform the signing role
+    """
+
     # import psbt in chunks via QR code
     psbt_raw_lst = []
     while True:
