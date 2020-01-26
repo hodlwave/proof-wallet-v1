@@ -470,29 +470,36 @@ Input fingerprint: {input_fingerprint}
                     input_fingerprint = input_fingerprint[:-1]
 
 async def view_receive_addresses(w):
-    title = "Proof Wallet: View Receive Addresses\n\n"
+    title = "Proof Wallet: View Receive Addresses"
     start = 0
-    N = 20
+    N = 10
     while True:
         external = w.deriveaddresses(start, start + N - 1, 0)
         internal = w.deriveaddresses(start, start + N - 1, 1)
-        msg = title
-        msg += f"Displaying receive and change addresses from index {start} to {start + N - 1}. "
-        msg += f"Press 'n' to view the next set of {N} addresses and 'p' for the "
-        msg += f"previous set of {N} addresses. Press 'x' to go back to the previous menu.\n\n"
 
         # display receive addreses
-        msg += "Derivation | Receive Address\n"
+        addr_str = "Derivation | Receive Address\n"
         for i, addr in enumerate(external):
-            msg += f"m/0/{str(i + start)} | "
-            msg += f"{color_text(addr, GREEN_COLOR, fg)}\n"
+            addr_str += f"m/0/{str(i + start)} | "
+            addr_str += f"{color_text(addr, GREEN_COLOR, fg)}\n"
 
         # display change addreses
-        msg += f"\nDerivation | Change Address\n"
+        addr_str += f"\nDerivation | Change Address\n"
         for i, addr in enumerate(internal):
-            msg += f"m/1/{str(i + start)} | "
-            msg += f"{color_text(addr, YELLOW_COLOR, fg)}\n"
+            addr_str += f"m/1/{str(i + start)} | "
+            addr_str += f"{color_text(addr, YELLOW_COLOR, fg)}\n"
 
+        msg = f"""{title}
+
+Addresses {start} to {start + N - 1}
+
+{addr_str}
+
+Controls
+'n' -- Next {N} addresses
+'p' -- Previous {N} addresses
+'x' -- Go back to wallet menu
+"""
         ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
         if ch == 'n':
             start = start + N
@@ -608,8 +615,8 @@ async def display_psbt(w, psbt, analyze_result):
         return (txid, vout, addr, amount)
     inputs = list(map(lambda i: parse_input(psbt, i), range(num_vin)))
     inputs_str = f"Inputs ({num_vin})\n"
-    for txid, vout, addr, amount in inputs:
-        txid_formatted = txid[:10] + "..." + txid[-10:]
+    for txin, vout, addr, amount in inputs:
+        txid_formatted = txin[:10] + "..." + txin[-10:]
         addr_colored = color_text(addr, GREEN_COLOR, fg)
         inputs_str += f"{txid_formatted}:{vout}\t{addr_colored}\t{amount}\n"
 
