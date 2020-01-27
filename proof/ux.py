@@ -52,7 +52,7 @@ def word_wrap(ln, w):
 
         yield left
 
-async def ux_show_story(msg, title=None, escape=None):
+async def ux_show_story(msg, escape=None):
     # show a big long string, and wait for XY to continue
     # - returns character used to get out (X or Y)
     # - can accept other chars to 'escape' as well.
@@ -64,9 +64,6 @@ async def ux_show_story(msg, title=None, escape=None):
         W = size['columns']
         ch = None
         lines = []
-        if title:
-            # kinda weak rendering but it works.
-            lines.append('\x01' + title)
 
         for ln in msg.split('\n'):
             if len(ln) > W:

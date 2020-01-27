@@ -28,7 +28,7 @@ Choose a network:
 (2) Testnet
 (3) Regtest
 """
-    return await ux_show_story(msg, None, ['1','2','3','q'])
+    return await ux_show_story(msg, ['1','2','3','q'])
 
 async def diagnostic_report(d):
     """Diagnostic report showing whether Proof Wallet dependencies are on the path"""
@@ -37,7 +37,7 @@ async def diagnostic_report(d):
     for k, v in d.items():
         msg += f"{k}: {'✔' if v else 'X'}\n"
     msg += "\nOnce all the programs are installed, press ENTER to proceed."
-    return await ux_show_story(msg, None, ['\r'])
+    return await ux_show_story(msg, ['\r'])
 
 async def home(network):
     """Proof Wallet home menu"""
@@ -49,7 +49,7 @@ async def home(network):
         msg += "2) Load wallet\n"
         msg += "3) Restore wallet\n"
         msg += "4) Exit\n"
-        ch = await ux_show_story(msg, None, ['1', '2', '3', '4'])
+        ch = await ux_show_story(msg, ['1', '2', '3', '4'])
         if ch == '1':
             await create_wallet(network)
         elif ch == '2':
@@ -108,7 +108,7 @@ Controls:
 
 {rolls_str}
 """
-        ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5', '6', '\r', 'x', 'u'])
+        ch = await ux_show_story(msg, ['1', '2', '3', '4', '5', '6', '\r', 'x', 'u'])
         if ch in ['1', '2', '3', '4', '5', '6']:
             rolls.append(ch)
         elif ch == '\r' and len(rolls) < MINIMUM_ROLLS_REQUIRED:
@@ -135,7 +135,7 @@ async def get_computer_entropy():
         msg += "1) Generate entropy directly from this computer\n"
         msg += "2) Manually enter entropy generated from the other Proof Wallet computer?\n"
         msg += "3) Cancel wallet creation process and return to the home menu"
-        ch = await ux_show_story(msg, None, ['1', '2', '3'])
+        ch = await ux_show_story(msg, ['1', '2', '3'])
         if ch == '1':
             return hexlify(sha256(os.urandom(256)).digest())
         elif ch == '3':
@@ -163,7 +163,7 @@ Controls
 
 {entropy_str}
 """
-                ch = await ux_show_story(msg, None, HEX_CHARS + escape_chars)
+                ch = await ux_show_story(msg, HEX_CHARS + escape_chars)
                 if ch in HEX_CHARS and len(digits) < 64:
                     digits.append(ch)
                 elif ch == 'u' and len(digits) > 0:
@@ -259,7 +259,7 @@ Controls
 Displayed data: {xpub}\n\n
 {generate_qr(xpub)}
 """
-        ch = await ux_show_story(msg, None, ["\r", "x"])
+        ch = await ux_show_story(msg, ["\r", "x"])
         if ch == 'x':
             return
 
@@ -286,7 +286,7 @@ The 24 BIP39 words you selected do not form a valid mnemonic.
 
 Press [Enter] return to the home menu.
 """
-        return await ux_show_story(msg, None, '\r')
+        return await ux_show_story(msg, '\r')
 
     msg = f"""Proof Wallet: Restore Wallet
 
@@ -302,7 +302,7 @@ Controls
 'x'     -- Abort wallet creation process
 [Enter] -- Go to wallet menu
 """
-    ch = await ux_show_story(msg, None, ['x', '\r'])
+    ch = await ux_show_story(msg, ['x', '\r'])
     if ch == 'x':
         return
     w = Wallet(mnemonic, [], M, N, network)
@@ -372,7 +372,7 @@ Controls
 'x'     -- Abort wallet creation process
 [Enter] -- Go to wallet menu
 """
-    ch = await ux_show_story(msg, None, ['x', '\r'])
+    ch = await ux_show_story(msg, ['x', '\r'])
     if ch == 'x':
         return
     w = Wallet(mnemonic, [], M, N, network)
@@ -407,7 +407,7 @@ You can now use this wallet to receive bitcoin and sign PSBTs.
 
 Press [Enter] to go to the wallet menu.
 """
-            await ux_show_story(msg, None, ['\r'])
+            await ux_show_story(msg, ['\r'])
             # update the wallet in WALLETS_GLOBAL
             idx = list(map(lambda w: w.name, WALLETS_GLOBAL)).index(w.name)
             WALLETS_GLOBAL[idx] = w_updated
@@ -425,7 +425,7 @@ Controls:
 [Enter] -- initiate the qr code scanner
 'x'     -- abort finalize wallet process
 """
-        ch = await ux_show_story(msg, None, ['\r', 'x'])
+        ch = await ux_show_story(msg, ['\r', 'x'])
         if ch == 'x':
             return w
         xpub = await scan_qr()
@@ -440,7 +440,7 @@ Controls:
 [Enter] -- retry the import
 'x'     -- abort finalize wallet process
 """
-            ch = await ux_show_story(msg, None, ['\r', 'x'])
+            ch = await ux_show_story(msg, ['\r', 'x'])
             if ch == '\r':
                 continue
             return
@@ -463,7 +463,7 @@ Controls:
 Derived fingerprint: {derived_fingerprint}
 Input fingerprint: {input_fingerprint}
 """
-                ch = await ux_show_story(msg, None, ['\r', 'u'] + HEX_CHARS)
+                ch = await ux_show_story(msg, ['\r', 'u'] + HEX_CHARS)
                 if ch == '\r' and input_fingerprint == "":
                     cosigner_xpubs.append((derived_fingerprint, xpub))
                     break
@@ -507,7 +507,7 @@ Controls
 'p' -- Previous {N} addresses
 'x' -- Go back to wallet menu
 """
-        ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
+        ch = await ux_show_story(msg, ['n', 'p', 'x'])
         if ch == 'n':
             start = start + N
         elif ch == 'p' and start > 0:
@@ -530,7 +530,7 @@ async def show_mnemonic(w):
 Controls
 [Enter] -- Go back to wallet menu
 """
-    return await ux_show_story(msg, None, ['\r'])
+    return await ux_show_story(msg, ['\r'])
 
 async def wallet_menu(w):
     """Wallet home menu."""
@@ -560,7 +560,7 @@ What would you like to do?
 5) Save Wallet
 6) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5', '6'])
+            ch = await ux_show_story(msg, ['1', '2', '3', '4', '5', '6'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
@@ -583,7 +583,7 @@ What would you like to do?
 4) Save Wallet
 5) Go back
 """
-            ch = await ux_show_story(msg, None, ['1', '2', '3', '4', '5'])
+            ch = await ux_show_story(msg, ['1', '2', '3', '4', '5'])
             if ch == '1':
                 await export_xpub(w.xpub)
             elif ch == '2':
@@ -671,7 +671,7 @@ Fee (rate): {fee_rate} sat/byte
 Press [Enter] to sign the transaction and proceed to the QR code export step.
 Press 'x' to abort the signing process and return to the Wallet Menu.
 """
-    return await ux_show_story(msg, None, ["\r", 'x'])
+    return await ux_show_story(msg, ["\r", 'x'])
 
 async def export_psbt(psbt):
     """Exports a base64 encoded psbt in a batch of QR codes."""
@@ -699,7 +699,7 @@ Controls:
 {chunked[i]}\n\n
 {generate_qr(chunked[i])}
 """
-        ch = await ux_show_story(msg, None, ['n', 'p', 'x'])
+        ch = await ux_show_story(msg, ['n', 'p', 'x'])
         if ch == 'n' and i < len(chunked) - 1:
             i += 1
         elif ch == 'p' and i > 0:
@@ -741,7 +741,7 @@ Below are the individual PSBT chunks you have imported so far:
 
 {"You have not yet imported any parts of a PSBT" if len(psbt_raw_lst) == 0 else psbt_str}
 """
-        ch = await ux_show_story(msg, None, ['\r', 'd', 'u', 'x'])
+        ch = await ux_show_story(msg, ['\r', 'd', 'u', 'x'])
         if ch == '\r':
             chunk = await scan_qr()
             psbt_raw_lst.append(chunk)
@@ -782,7 +782,7 @@ PSBT you imported for the given wallet {w.name}. Press [Enter] to proceed and \
 
 {summary}
 """
-    ch = await ux_show_story(msg, None, ['\r', 'x'])
+    ch = await ux_show_story(msg, ['\r', 'x'])
     if not success or ch == 'x':
         return
 
