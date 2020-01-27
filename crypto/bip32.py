@@ -49,6 +49,15 @@ def decode(s):
     return b'\x00' * pad + res
 
 def bip32_deserialize(data):
+    """
+    Deserialize a string into a BIP32 extended key (assumes string is valid)
+
+    See the bip32 implementation to validate correctness:
+        https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#Serialization_format
+
+    Parameters:
+        data (str): a serialized bip32 exteneded key
+    """
     dbin = decode(data)
     vbytes = dbin[0:4]
     depth = dbin[4]
@@ -59,10 +68,17 @@ def bip32_deserialize(data):
     return (vbytes, depth, fingerprint, i, chaincode, key)
 
 def bin_hash160(string):
+    """Hash160 (SHA256 followed by RIPEMD160)"""
     intermed = hashlib.sha256(string).digest()
     return hashlib.new('ripemd160', intermed).digest()
 
 def fingerprint(xpub):
+    """
+    BIP32 fingerprint for the given extended key
+
+    Parameters:
+        xpub (str): valid bip32 extended key
+    """
     vbytes, depth, fingerprint, i, chaincode, key = bip32_deserialize(xpub)
     fp_bytes = bin_hash160(key)[:4]
     return binascii.hexlify(fp_bytes).decode('ascii')
