@@ -20,12 +20,14 @@ class Getch:
         return ch
 
 async def getch():
+    """Async utility to fetch a single key the user presses"""
     q = aio.Queue()
     loop = aio.get_event_loop()
     aio.ensure_future(q.put(Getch()()), loop=loop)
     return (await q.get())
 
 def get_terminal_size():
+    """Gets the current size of the terminal"""
     size = shutil.get_terminal_size()
     return {
         "lines": size.lines,
@@ -33,6 +35,7 @@ def get_terminal_size():
     }
 
 def word_wrap(ln, w):
+    """Utility to wrap a line if it's longer than the given width"""
     while ln:
         sp = ln.rfind(' ', 0, w)
 
@@ -53,10 +56,19 @@ def word_wrap(ln, w):
         yield left
 
 async def ux_show_story(msg, escape=None):
-    # show a big long string, and wait for XY to continue
-    # - returns character used to get out (X or Y)
-    # - can accept other chars to 'escape' as well.
-    # - accepts a stream or string
+    """
+    Show a big long string and wait for an escape character to continue
+
+    'U' (up) and 'D' down can be used to scroll through stories that extend past the
+    height of the terminal. Function based on code by Coinkite.
+
+    Parameters:
+        msg          (str): story displayed to user
+        escape (list[chr]): list of escape characters
+
+    Returns:
+        character used to escape
+    """
     top = 0
     while 1:
         size = get_terminal_size()
