@@ -43,3 +43,58 @@ Most of the code is window dressing that makes it easier for non-technical users
 * Wallet restore functionality so that private key data need not be persisted to electronic media; instead the user can restore their wallet from the 24 word mnemonic each time he intends to view his deposit addresses or sign a transaction.
 * Users can view all external and internal (change) addresses associated with the p2wsh multisignature wallet to maximize the security of depositing funds.
 * Users can _optionally_ choose to persist the wallet (containing private key data) to the filesystem if that is permissible under their threat model
+
+## Security Tradeoffs
+The Glacier Protocol was a major inspiration for Proof Wallet's design decisions; it is generally regarded as the most secure way to store bitcoin: at each step of the protocol, it stresses risk elimination over risk reduction and offers numerous desirable security properties that Proof Wallet tries to maintain; these include:
+  * Open source software stack (Ubuntu, Bitcoin Core, Proof Wallet)
+  * Airgapped execution on eternally quarantined hardware
+  * Deterministic key generation from multiple sources of entropy
+  * Correctness verification using duplicate enviornments
+  * General purpose hardware instead of hardware wallets (effectively removing supply chain risk)
+  * Low bandwidth communication to and from quarantined hardware (QR codes)
+
+Despite its high security bar, few bitcoin holders use Glacier Protocol. Some reasons for this may include:
+  * Discounting and / or ignorance of security risks
+  * Fear of making a mistake
+  * Qualms about the user experience (warranted or not)
+	* Necessity for handling individual private keys
+	* Address reuse
+	* No BIP 39 or HD wallet (BIP 32) support
+	* Monolithic - no way to interoperate with other hardware or software wallets
+
+Proof Wallet makes a few security tradeoffs versus Glacier Protocol with the aim of bridging some of the UX issues described above. These include:
+  * **Larger codebase**: glacierscript.py is 861 lines of code while Proof Wallet is currently ~2000 lines. Most of the difference comes from Proof Wallet's user interface that features simple menus and in-terminal QR code import/export that some users may feel makes for a friendlier experience.
+  * **Optional storage on electronic media**: Proof Wallet allows users to optionally store private keys directly on device; under some threat models, this might be an acceptable tradeoff for users to make for a better user experience. If not, a user can restore a previously created wallet before every use.
+  * **Minimal crypto operations outside of Bitcoin Core**: Proof Wallet performs a select few security critical operations outside of Bitcoin Core to enable large usability improvements. These are:
+	* **BIP 39**: The reference implementation of BIP 39 is used to convert entropy to a BIP 39 mnemonic phrase. This is desirable because backing up a 24 word seed has now become a standard user experience common to most popular wallets.
+	* **BIP 32 extended key -> BIP 32 fingerprint calculation**: In order to fulfill the requirements of the PSBT format, Proof Wallet must calculate the wallet's BIP 32 fingerprint. This involves performing a hash160 on the key bytes of a deserialized xpub. The code for decoding the Base58 encoded xpub was taken from Peter Todd's python-bitcointools. Users can easily reference BIP32 itself to verify the accuracy of the few other lines of code.
+	* **PSBT safety check**: in order to make the code as short and secure as possible, Proof Wallet utilizes a very narrow part of the PSBT standard. Specifically, a user creates a cosigner in a p2wsh multisignature wallet; Proof Wallet only signs transactions that contain the wallet's inputs. Proof Wallet does not implement BIP 32 child key derivation so relative to the master private key ("m"), the only valid external receives addresses are at "m/0/*" and the only valid change addresses are at "m/1/*". This simplicity makes it straightforward to validate whether a PSBT is safe for the user to sign. The function that performs this task (`validate_psbt`) is well commented, easily auditable and can be found in `proof/utils.py`.
+
+Many users may find these tradeoffs for the improvements in user experience they offer; others may not. A nice feature of Proof Wallet is that it can interoperate with other PSBT compliant wallets. If a user wants to enjoy specific security properties of Glacier Protocol while also using some other PSBT-compliant wallet he enjoys, Proof Wallet may be a good choice. Proof Wallet arguably improves on Glacier Protocol's security assumptions in at least 1 respect. During the deposit and withdrawl steps of Glacier Protocol, a user has on his person all the means of spending (which is to say losing and/or getting stolen) his bitcoin at that very time and place. A great advantage of PSBT multisig is that it provides a standard to interactively process an incomplete transaction at different times and places until the transaction is complete and ready to be finalized / broadcast to the network. With a quorum of Proof Wallets or a heterogeneous quorum of PSBT-compliant wallets, there never has to be a single point of failure during the deposit or withdrawal process. This seems like a very desirable security feature to have. Further, a multisignature quorum consisting of different wallets may reduce the risk that a security flaw in one wallet results in a catastrophic loss of funds.
+
+## Codebase Summary
+```
+main.py -- wallet entrypoint
+
+crypto/
+	bip32.py -- deserializes a BIP 32 xpub and calculates its fingerprint
+	mnemonic.py -- abbreviated reference implementation of BIP 39; adds version bits for testnet & regtest
+	english.txt -- BIP 39 wordlist
+
+proof/
+	actions.py -- interactive menus
+	bitcoind.py -- adapter for Bitcoin Core's JSON RPC interface (adapted from glacierscript.py)
+	constants.py -- various constants used throughout Proof Wallet
+	trie.py -- a basic Trie implementation for storing and traversing BIP 39 words
+	utils.py -- utility functions and the security-critical validate_psbt()
+	ux.py -- user interaction primitives
+	wallet.py -- a basic p2wsh multisignature wallet that maintains a policy, one cosigner's private data, public data for the other cosigners and methods for utilizing Bitcoin Core's RPC interface (e.g. computes receive addresses and signs PSBTs)
+```
+
+## Improvements
+* Comprehensive unit testing. Refactor code as much as possible into pure functions to improve testability
+* Simulated integration testing of the interactive actions
+* Use best practices for getting keyboard input from the user in proof/ux.py. This code was hacked together.
+* Render QR codes so they fit on screen without the user having to resize the terminal
+* Code review from python3 experts that understand best practices
+* Security review by security experts
