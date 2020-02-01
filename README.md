@@ -91,6 +91,21 @@ proof/
 	wallet.py -- a basic p2wsh multisignature wallet that maintains a policy, one cosigner's private data, public data for the other cosigners and methods for utilizing Bitcoin Core's RPC interface (e.g. computes receive addresses and signs PSBTs)
 ```
 
+## Interoperability
+Proof Wallet has successfully been tested to interoperate with the following wallets:
+
+#### Electrum (master branch)
+
+PSBT functionality has been added to the master branch of the [Electrum Bitcoin Wallet](https://github.com/spesmilo/electrum), but has not yet been included in a release. So far Electrum is the only wallet that has been tested as the watch-only client for a multisignature quorum that includes Proof Wallet. Electrum serves this purpose well although there is some UX friction:
+* It expects the extended public keys to be added according to [SLIP-0132](https://github.com/satoshilabs/slips/blob/master/slip-0132.md) based on the type of addresses the wallet will generate. Proof Wallet only exports xpubs and tpubs in line with Bitcoin Core's descriptor approach to address formatting so as of now users will have to use a Bitcoin Extended Public Key Converter Tool such as [this one](https://jlopp.github.io/xpub-converter/) to import Proof Wallet's extended public keys.
+* Electrum doesn't display PSBT QR codes in the base64 format so currently a user would have to manually create the QR code(s). The base64 string can be added to the user's clipboard by selecting Export -> Copy in the Electrum transaction menu.
+
+A user can also use Electrum as a cosigner in a multisignature quorum that includes Proof Wallet. After the next release, this will be even easier to do as users will be able to do everything on an airgapped computer with the Electrum binary as is common practice among bitcoin users.
+
+#### Coldcard
+
+The Coldcard wallet can be used as part of a  multisignature quorum that includes a Proof Wallet cosigner. At this point, users can only accomplish this when the Coldcard is connected to the computer via USB and using "m" as the Coldcard's highest hardened derivation path. It does not seem to be possible to use the Coldcard for this purpose in the airgapped mode. Also note that the Coldcard does not keep track of its cosigners' highest hardened derivation paths so multisignature receive addresses cannot be displayed on the device itself.
+
 ## Improvements
 * Comprehensive unit testing. Refactor code as much as possible into pure functions to improve testability
 * Simulated integration testing of the interactive actions
