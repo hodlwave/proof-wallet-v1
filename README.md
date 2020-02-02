@@ -5,6 +5,11 @@ The goal of this project is to improve the user experience for bitcoin holders w
 
 <b>NOTE:</b> _Proof Wallet is currently in development and should not be used to secure mainnet bitcoins. Please test on testnet and regtest, and create an issue if you encounter any bugs._
 
+## Instructions
+If you want to test Proof Wallet, it will likely only work properly on a computer running Linux that has `bitcoin-cli`, `bitcoind`, `qrencode`, and `zbarcam` on its PATH. Also note that Proof Wallet uses Bitcoin Core's `sortedmulti` wallet descriptor that is unavailable as of the most recent (0.19.0.1) release; therefore, in order to test Proof Wallet, you need to compile Bitcoin Core directly from its master branch.
+
+You can start Proof Wallet by running `python3 main.py` from inside the project directory.
+
 ## Motivation
 Multisignature wallets are useful because - _properly executed_ - they can reduce the likelihood of losing bitcoin due to personal error or theft. If Alice creates a multisignature wallet with an M of N policy, she can lose any N - M of the private keys and still retain the ability to spend the bitcoins. Similarly, an adversary wishing to steal Alice's bitcoins would have to compromise at least M keys for the theft to be successful. In this way, multisig wallets improve security by adding redundancy and increasing the cost of theft.
 
