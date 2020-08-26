@@ -1,4 +1,6 @@
-# Proof Wallet
+# Proof Wallet [DEPRECATED]
+
+*** This was the initial prototype of Proof Wallet. The current version is being developed [here](https://github.com/hodlwave/proof-wallet) ***
 
 The goal of this project is to improve the user experience for bitcoin holders wishing to create a multisignature cold storage wallet by leveraging Bitcoin Core's wallet functionality.
 
